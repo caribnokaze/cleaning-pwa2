@@ -26,23 +26,17 @@ async function send() {
   const btn = document.getElementById("submitBtn");
   let isSuccess = false;
 
-  // 画面ロック
+  // 画面ロック（送信中に二度押しされないようにする）
   const lockLayer = document.createElement("div");
   lockLayer.id = "screen-lock";
   Object.assign(lockLayer.style, {
-    position: "fixed",
-    top: "0",
-    left: "0",
-    width: "100%",
-    height: "100%",
-    background: "rgba(0,0,0,0.1)",
-    zIndex: "9999",
-    cursor: "not-allowed"
+    position: "fixed", top: "0", left: "0", width: "100%", height: "100%",
+    background: "rgba(0,0,0,0.1)", zIndex: "9999", cursor: "not-allowed"
   });
   document.body.appendChild(lockLayer);
 
   try {
-    // 入力取得
+    // 1. 入力値の取得
     const staff = document.getElementById("staff").value;
     const site = document.getElementById("site").value;
     const reportDate = document.getElementById("reportDate").value;
@@ -59,25 +53,21 @@ async function send() {
     }
 
     const workTypeLabels = {
-      normal: "通常清掃のみ",
-      full: "定期清掃＋フィルター清掃",
-      regular: "定期清掃のみ",
-      filter: "フィルター清掃のみ"
+      normal: "通常清掃のみ", full: "定期清掃＋フィルター清掃",
+      regular: "定期清掃のみ", filter: "フィルター清掃のみ"
     };
     const workTypeLabel = workTypeLabels[workType] || "その他";
 
+    // 2. 画像圧縮フェーズ
     btn.disabled = true;
     btn.innerText = "画像を圧縮中...";
 
-    // 圧縮対象をまとめる
     const allFiles = [
       ...Array.from(files).map(f => ({ file: f, isExtra: false })),
       ...Array.from(extraFiles).map(f => ({ file: f, isExtra: true }))
     ];
 
     const allImages = [];
-
-    // 画像圧縮（逐次）
     for (let i = 0; i < allFiles.length; i++) {
       const item = allFiles[i];
       const label = item.isExtra ? `_${workTypeLabel}` : "";
@@ -88,52 +78,48 @@ async function send() {
         data: compressed,
         isExtra: item.isExtra
       });
-
       btn.innerText = `圧縮中 (${i + 1}/${allFiles.length})`;
     }
 
-    // UI直送（1枚ずつ await）
-    btn.innerText = `送信中 (0/${allImages.length})`;
+    // 3. Cloud Runへ「一括」送信
+    // ここで一気に送ることで、ブラウザ側の待ち時間を最小化します
+    btn.innerText = `データを送信中...`;
 
-    for (let i = 0; i < allImages.length; i++) {
-      await fetch("/upload", {
-        method: "POST",
-        mode: "no-cors",
-        body: JSON.stringify({
-          staff,
-          site,
-          reportDate,
-          workTypeLabel,
-          workTime,
-          singleImage: allImages[i]
-        })
-      });
+    const response = await fetch("/upload", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        staff,
+        site,
+        reportDate,
+        workTypeLabel,
+        workTime,
+        allImages: allImages // 全画像を配列でまとめて送信
+      })
+    });
 
-      btn.innerText = `送信中 (${i + 1}/${allImages.length})`;
+    if (!response.ok) throw new Error("サーバーへの送信に失敗しました");
 
-      // GAS安定化ウェイト（重要）
-      await new Promise(r => setTimeout(r, 500));
-    }
-
-    // 成功表示
+    // 4. 成功表示（ユーザーはここでスマホをしまってもOK）
     isSuccess = true;
-    btn.innerText = "送信完了";
+    btn.innerText = "送信完了！";
     btn.style.background = "#28a745";
     btn.style.color = "#fff";
 
     const msg = document.createElement("p");
-    msg.innerHTML = "<strong>お疲れ様でした！</strong><br>3秒後に画面を戻します。";
+    msg.innerHTML = "<strong>送信を受け付けました！</strong><br>裏側で処理していますので、画面を閉じても大丈夫です。";
     msg.style.textAlign = "center";
     msg.style.color = "#28a745";
     msg.style.margin = "10px 0";
 
     btn.parentNode.insertBefore(msg, btn);
 
+    // 3秒後にリロード
     setTimeout(() => location.reload(), 3000);
 
   } catch (e) {
     console.error(e);
-    alert("送信中にエラーが発生しました。\n通信環境を確認してください。");
+    alert("エラーが発生しました。通信環境を確認してください。");
     btn.disabled = false;
     btn.innerText = "送信";
   } finally {
