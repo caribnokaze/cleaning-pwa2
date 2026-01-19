@@ -24,11 +24,20 @@ app.post('/upload', (req, res) => {
 
 async function sendToGas(data) {
     try {
-        console.log("Starting background upload to GAS...");
-        await axios.post(GAS_URL, data);
-        console.log("Successfully uploaded to GAS");
+        const { allImages, ...info } = data;
+        console.log(`Starting background upload of ${allImages.length} images...`);
+
+        for (let i = 0; i < allImages.length; i++) {
+            await axios.post(GAS_URL, {
+                ...info,
+                singleImage: allImages[i]
+            });
+            console.log(`GAS upload: ${i + 1}/${allImages.length}`);
+            // GASがパンクしないよう少し待つ
+            await new Promise(r => setTimeout(r, 500));
+        }
     } catch (error) {
-        console.error("Error uploading to GAS:", error.message);
+        console.error("Error:", error.message);
     }
 }
 
