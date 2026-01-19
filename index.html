@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="https://unpkg.com/dexie/dist/dexie.js"></script>
+  
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      padding: 16px;
+      font-family: -apple-system, BlinkMacSystemFont,
+                   "Segoe UI", Roboto, "Helvetica Neue", Arial;
+      font-size: 18px;
+      background-color: #f5f5f5; 
+      display: flex;
+      justify-content: center;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 500px; /* パソコンで見た時の最大幅 */
+      background: #fff;
+      padding: 24px;
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1); /* 軽い影をつけて見やすく */
+    }
+
+    h2 {
+      font-size: 22px;
+      margin-top: 0;
+      margin-bottom: 20px;
+      text-align: center; /* タイトルも中央に */
+    }
+
+    .form-group {
+      margin-bottom: 16px;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 4px;
+      font-weight: bold;
+    }
+
+    /* 入力欄、セレクトボックス、ボタンの共通設定 */
+    input, select, button {
+      width: 100%;             /* 横幅をコンテナいっぱいに広げる */
+      font-size: 18px;         /* 文字を大きくして読みやすく */
+      padding: 14px;           /* 内側の余白を増やして押しやすく */
+      margin: 8px 0;           /* 前後の間隔を調整 */
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      background-color: #fff;
+      
+      /* iPhone独自のスタイルをリセットし、こちらの指定を優先させる */
+      display: block;
+      appearance: none;
+      -webkit-appearance: none;
+      box-sizing: border-box;  /* パディングを含めたサイズ計算にする */
+    }
+
+    /* セレクトボックス（現場名）専用の矢印装飾 */
+    select {
+      /* 右側に下向きの矢印を表示（これがないとプルダウンに見えないため） */
+      background-image: url('data:image/svg+xml;charset=UTF-8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>');
+      background-repeat: no-repeat;
+      background-position: right 14px center;
+      background-size: 18px;
+      padding-right: 40px;     /* 矢印と文字が重ならないように右側を空ける */
+      cursor: pointer;
+    }
+
+    /* 報告日（日付欄）の高さもセレクトボックスと合わせる */
+    input[type="date"] {
+      min-height: 54px;
+    }
+
+    /* ファイル選択ボタンのスタイル調整 */
+    input[type="file"] {
+      padding: 10px;
+      border: 1px dashed #aaa;
+      background: #fafafa;
+    }
+
+    button {
+      background: #4477cc;
+      color: #fff;
+      border: none;
+      cursor: pointer;
+      font-weight: bold;
+      margin-top: 20px;
+    }
+
+    button:active {
+      background: #335599;
+    }
+
+    .radio-group {
+      background: #f9f9f9;
+      padding: 10px;
+      border-radius: 8px;
+      border: 1px solid #eee;
+    }
+    .radio-item {
+      display: flex;
+      align-items: center;
+      margin-bottom: 12px;
+      cursor: pointer;
+    }
+    .radio-item:last-child { margin-bottom: 0; }
+    /* ラジオボタン自体のサイズを大きくして押しやすく */
+    input[type="radio"] {
+      appearance: auto;
+      -webkit-appearance: radio;
+      width: 24px;
+      height: 24px;
+      margin: 0 12px 0 0;
+      flex-shrink: 0;
+      cursor: pointer;
+    }
+    .radio-label {
+      font-size: 17px;
+      font-weight: normal;
+    }
+
+    .footer-logo {
+      display: block;           /* ブロック要素として扱う */
+      margin: 30px auto 0;      /* 上に30pxの余白、左右は自動で中央揃え、下は0 */
+      max-width: 150px;         /* 画像の最大幅を指定（大きすぎないように調整） */
+      width: 100%;              /* 親要素の幅に合わせて縮小 */
+      height: auto;             /* 縦横比を保持 */
+    }
+  </style>
+</head>
+
+<body>
+
+  <div class="container">
+    <h2>
+      TOCORO清掃スタッフ専用<br>
+      完了写真アップロードシステム
+    </h2>
+    <div class="form-group">
+      <label for="date">報告日：</label>
+      <input type="date" id="reportDate">
+    </div>
+    
+    <div class="form-group">
+      <label for="staff">担当者名：</label>
+      <input type="text" id="staff" placeholder="フルネームスペースなし">
+    </div>
+
+    <div class="form-group">
+  <label for="site">現場名：</label>
+  <select id="site">
+    <option value="" disabled selected>選択してください</option>
+    <option value="aoki">aoki</option>
+    <option value="APRO8">APRO8</option>
+    <option value="APRO9">APRO9</option>
+    <option value="APRO10">APRO10</option>
+    <option value="APRO11">APRO11</option>
+    <option value="APRO16">APRO16</option>
+    <option value="APRO17">APRO17</option>
+    <option value="BoccA">BoccA</option>
+    <option value="BonA">BonA</option>
+    <option value="BonB">BonB</option>
+    <option value="bettei">bettei</option>
+    <option value="C-VIEW">C-VIEW</option>
+    <option value="COZY">COZY</option>
+    <option value="Dio">Dio</option>
+    <option value="Forest">Forest</option>
+    <option value="FuA">FuA</option>
+    <option value="FuB">FuB</option>
+    <option value="Furaku-Cat">Furaku-Cat</option>
+    <option value="Furaku-Dog">Furaku-Dog</option>
+    <option value="Furaku-Poodle">Furaku-Poodle</option>
+    <option value="FV East">FV East</option>
+    <option value="FV West">FV West</option>
+    <option value="Garden">Garden</option>
+    <option value="HAZUKI">HAZUKI</option>
+    <option value="Holiday">Holiday</option>
+    <option value="Holiday A">Holiday A</option>
+    <option value="Holiday B">Holiday B</option>
+    <option value="Holiday C">Holiday C</option>
+    <option value="ID">ID</option>
+    <option value="ID2">ID2</option>
+    <option value="ID3">ID3</option>
+    <option value="ID5">ID5</option>
+    <option value="ID6">ID6</option>
+    <option value="ID7">ID7</option>
+    <option value="KoKo">KoKo</option>
+    <option value="KURA">KURA</option>
+    <option value="M-Forest">M-Forest</option>
+    <option value="M-Natural">M-Natural</option>
+    <option value="M-Traditional">M-Traditional</option>
+    <option value="Ma Maison">Ma Maison</option>
+    <option value="MITSU-House">MITSU-House</option>
+    <option value="MineMine">MineMine</option>
+    <option value="MORI">MORI</option>
+    <option value="MUTSUKI">MUTSUKI</option>
+    <option value="Nagomi">Nagomi</option>
+    <option value="pure">pure</option>
+    <option value="RAKUWA">RAKUWA</option>
+    <option value="RISA">RISA</option>
+    <option value="Serend">Serend</option>
+    <option value="SORA">SORA</option>
+    <option value="STATION">STATION</option>
+    <option value="Warabi">Warabi</option>
+    <option value="yawaragi">yawaragi</option>
+    <option value="ZURA">ZURA</option>
+    <option value="エラーブル風">エラーブル風</option>
+    <option value="エラーブル禅">エラーブル禅</option>
+    <option value="園ENN">園ENN</option>
+    <option value="金魚">金魚</option>
+    <option value="空KUU">空KUU</option>
+    <option value="湖凪">湖凪</option>
+    <option value="心">心</option>
+    <option value="さくや301">さくや301</option>
+    <option value="さくや302">さくや302</option>
+    <option value="燦々">燦々</option>
+    <option value="雫">雫</option>
+    <option value="月ノ森">月ノ森</option>
+    <option value="つるば舎">つるば舎</option>
+    <option value="響">響</option>
+    <option value="富美">富美</option>
+    <option value="ヘルシンキ">ヘルシンキ</option>
+  </select>
+</div>
+
+        <div class="form-group">
+      <label>清掃区分：</label>
+      <div class="radio-group">
+         <label class="radio-item">
+          <input type="radio" name="workType" value="normal" checked>
+          <span class="radio-label">通常清掃のみ</span>
+        </label>
+        <label class="radio-item">
+          <input type="radio" name="workType" value="full">
+          <span class="radio-label">定期清掃＋フィルター清掃</span>
+        </label>
+        <label class="radio-item">
+          <input type="radio" name="workType" value="regular">
+          <span class="radio-label">定期清掃のみ</span>
+        </label>
+        <label class="radio-item">
+          <input type="radio" name="workType" value="filter">
+          <span class="radio-label">フィルター清掃のみ</span>
+        </label>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label>通常清掃写真：</label>
+      <input type="file" id="photos" multiple accept="image/*">
+      <small style="color: #666;">※最大100枚まで</small>
+    </div>
+
+    <div class="form-group">
+      <label for="workTime">フィルター清掃時間：</label>
+      <select id="workTime">
+        <option value="" disabled selected>選択してください</option>
+        <option value="15">15分</option>
+        <option value="30">30分</option>
+        <option value="45">45分</option>
+        <option value="60">60分</option>
+        <option value="75">75分</option>
+        <option value="90">90分</option>
+        <option value="105">105分</option>
+        <option value="120">120分</option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label>定期清掃およびフィルター清掃写真：</label>
+      <input type="file" id="extraPhotos" multiple accept="image/*">
+      <small style="color: #666;">※最大100枚まで</small>
+    </div>
+
+    <button type="button" id="submitBtn" onclick="send()" disabled>送信</button>
+
+    <img src="images/tocorologo.png" alt="TOCORO Clean Team ロゴ" class="footer-logo">
+  </div>
+
+  <script>
+    // ブラウザ内DBの設定
+    const db = new Dexie("PhotoUploadDB");
+    db.version(1).stores({
+      queue: '++id, status' 
+    });
+
+    // Service Worker（裏方の作業員）の登録
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('sw.js')
+          .then(reg => console.log('SW registered'))
+          .catch(err => console.log('SW registration failed', err));
+      });
+    }
+
+    // 以前の app.js 内のバリデーションを活かすため、ボタンを監視するなどの処理は app.js 側に記述
+  </script>
+
+  <script src="app.js"></script>
+</body>
+</html>
