@@ -1,10 +1,17 @@
-FROM nginx:alpine
+FROM node:18-slim
 
-# Cloud Runのポート設定に合わせるための設定変更
-RUN sed -i 's/listen       80;/listen       8080;/g' /etc/nginx/conf.d/default.conf
+# アプリケーションディレクトリを作成
+WORKDIR /usr/src/app
 
-# ファイルをコピー
-COPY . /usr/share/nginx/html
+# パッケージ定義をコピーしてインストール
+COPY package*.json ./
+RUN npm install
+
+# 全ファイルをコピー
+COPY . .
 
 # ポート8080を公開
 EXPOSE 8080
+
+# アプリを起動
+CMD [ "npm", "start" ]
