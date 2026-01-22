@@ -4,38 +4,79 @@
 window.addEventListener('DOMContentLoaded', () => {
   const dateInput = document.getElementById("reportDate");
   if (dateInput) dateInput.valueAsDate = new Date();
+  
+  // 初期表示時の無効化制御を実行
+  toggleInputsByWorkType();
   updateButtonState();
 });
 
 /**
- * 2. 各項目ごとの枚数制限設定
- * HTMLのラベルに記載された制限枚数とIDを紐付けます
+ * 2. 枚数制限設定
  */
 const FILE_LIMITS = {
-  // 通常清掃
-  'photos_amenity': 5,
-  'photos_kitchen': 15,
-  'photos_toilet': 10,
-  'photos_bath': 15,
-  'photos_living': 15,
-  'photos_bedroom': 15,
-  'photos_hallway': 15,
-  'photos_others': 10,
-  // 定期清掃
-  'regular_1': 10,
-  'regular_2': 10,
-  'regular_3': 10,
-  'regular_4': 10,
-  'regular_5': 10,
-  'regular_6': 10,
-  'regular_7': 10,
-  'regular_8': 10,
-  // フィルター
+  'photos_amenity': 5, 'photos_kitchen': 15, 'photos_toilet': 10,
+  'photos_bath': 15, 'photos_living': 15, 'photos_bedroom': 15,
+  'photos_hallway': 15, 'photos_others': 10,
+  'regular_1': 10, 'regular_2': 10, 'regular_3': 10, 'regular_4': 10,
+  'regular_5': 10, 'regular_6': 10, 'regular_7': 10, 'regular_8': 10,
   'photos_filter': 10
 };
 
 /**
- * 3. メイン送信関数
+ * 3. 清掃区分による入力項目の有効・無効切り替え
+ */
+function toggleInputsByWorkType() {
+  const workType = document.querySelector('input[name="workType"]:checked')?.value;
+  
+  // 各グループのIDリスト
+  const normalIds = ['photos_amenity', 'photos_kitchen', 'photos_toilet', 'photos_bath', 'photos_living', 'photos_bedroom', 'photos_hallway', 'photos_others'];
+  const regularIds = ['regular_1', 'regular_2', 'regular_3', 'regular_4', 'regular_5', 'regular_6', 'regular_7', 'regular_8'];
+  const filterIds = ['photos_filter', 'workTime'];
+
+  // 有効・無効を切り替える補助関数
+  const setEnable = (ids, enabled) => {
+    ids.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) {
+        el.disabled = !enabled;
+        el.style.opacity = enabled ? "1" : "0.3";
+        // 無効化された場合のみ、値をリセットする
+        if (!enabled) el.value = ""; 
+      }
+    });
+  };
+
+  /**
+   * 判定ロジックの修正
+   */
+  if (workType === 'normal') {
+    // 通常清掃のみ：通常は有効 / 定期・フィルターは無効
+    setEnable(normalIds, true);
+    setEnable(regularIds, false);
+    setEnable(filterIds, false);
+  } 
+  else if (workType === 'regular') {
+    // 定期清掃のみ：通常も有効 / 定期も有効 / フィルターのみ無効
+    setEnable(normalIds, true);
+    setEnable(regularIds, true);
+    setEnable(filterIds, false);
+  } 
+  else if (workType === 'filter') {
+    // フィルターのみ：通常は無効 / 定期も無効 / フィルターのみ有効
+    setEnable(normalIds, false);
+    setEnable(regularIds, false);
+    setEnable(filterIds, true);
+  } 
+  else if (workType === 'full') {
+    // 定期＋フィルター：すべて有効
+    setEnable(normalIds, true);
+    setEnable(regularIds, true);
+    setEnable(filterIds, true);
+  }
+}
+
+/**
+ * 4. メイン送信関数
  */
 async function send() {
   const btn = document.getElementById("submitBtn");
@@ -85,11 +126,10 @@ async function send() {
     btn.innerText = "画像を圧縮中...";
 
     const allImages = [];
-    let processedCount = 0;
-
     for (const inputInfo of fileInputs) {
       const inputEl = document.getElementById(inputInfo.id);
-      if (!inputEl || !inputEl.files.length) continue;
+      // 無効化されている入力欄のファイルは送信対象から外す
+      if (!inputEl || inputEl.disabled || !inputEl.files.length) continue;
 
       const files = Array.from(inputEl.files);
       for (let i = 0; i < files.length; i++) {
@@ -98,8 +138,6 @@ async function send() {
           name: `${site}_(${reportDate})_${staff}_[${inputInfo.label}]_${i + 1}`,
           data: compressed
         });
-        processedCount++;
-        btn.innerText = `圧縮中 (${processedCount}枚完了)`;
       }
     }
 
@@ -110,7 +148,7 @@ async function send() {
       body: JSON.stringify({
         staff, site, reportDate,
         workTypeLabel: workTypeLabels[workType],
-        workTime: (workType === 'full' || workType === 'filter') ? workTime : "0",
+        workTime: workTime || "0",
         allImages
       })
     });
@@ -127,13 +165,12 @@ async function send() {
     alert("エラーが発生しました。");
     btn.disabled = false;
     btn.innerText = "送信";
-  } finally {
-    if (!isSuccess) lockLayer.remove();
+    if (lockLayer) lockLayer.remove();
   }
 }
 
 /**
- * 4. 画像圧縮
+ * 5. 画像圧縮
  */
 function compressToBase64(file, maxWidth, quality) {
   return new Promise((resolve) => {
@@ -159,7 +196,7 @@ function compressToBase64(file, maxWidth, quality) {
 }
 
 /**
- * 5. 送信ボタン制御
+ * 6. 送信ボタン制御（バリデーション）
  */
 function updateButtonState() {
   const staff = document.getElementById("staff").value;
@@ -168,17 +205,24 @@ function updateButtonState() {
   const workType = document.querySelector('input[name="workType"]:checked')?.value;
   const workTime = document.getElementById("workTime").value;
 
-  // バリデーション用：必須項目に写真が入っているかチェック
-  const hasNormalPhotos = ['photos_amenity', 'photos_kitchen', 'photos_toilet', 'photos_bath', 'photos_living', 'photos_bedroom', 'photos_hallway'].some(id => document.getElementById(id).files.length > 0);
-  const hasRegularPhotos = ['regular_1', 'regular_2', 'regular_3', 'regular_4', 'regular_5', 'regular_6', 'regular_7'].some(id => document.getElementById(id).files.length > 0);
-  const hasFilterPhotos = document.getElementById('photos_filter').files.length > 0;
+  // 必須項目に1枚以上あるか
+  const hasNormal = ['photos_amenity', 'photos_kitchen', 'photos_toilet', 'photos_bath', 'photos_living', 'photos_bedroom', 'photos_hallway'].some(id => document.getElementById(id).files.length > 0);
+  const hasRegular = ['regular_1', 'regular_2', 'regular_3', 'regular_4', 'regular_5', 'regular_6', 'regular_7'].some(id => document.getElementById(id).files.length > 0);
+  const hasFilter = document.getElementById('photos_filter').files.length > 0;
 
   let isValid = false;
   if (staff && site && reportDate) {
-    if (workType === 'normal') isValid = hasNormalPhotos;
-    else if (workType === 'regular') isValid = hasRegularPhotos;
-    else if (workType === 'filter') isValid = hasFilterPhotos && workTime;
-    else if (workType === 'full') isValid = hasRegularPhotos && hasFilterPhotos && workTime;
+    if (workType === 'normal') {
+      isValid = hasNormal;
+    } else if (workType === 'regular') {
+      // 定期のみ：定期写真が必須（通常写真は任意扱い）
+      isValid = hasRegular;
+    } else if (workType === 'filter') {
+      isValid = hasFilter && workTime;
+    } else if (workType === 'full') {
+      // 定期＋フィルター：定期とフィルター写真、時間が必須
+      isValid = hasRegular && hasFilter && workTime;
+    }
   }
 
   const btn = document.getElementById("submitBtn");
@@ -187,23 +231,24 @@ function updateButtonState() {
 }
 
 /**
- * 6. イベント設定（枚数制限チェック含む）
+ * 7. イベント設定
  */
 document.addEventListener('change', (e) => {
-  // ファイル入力の場合
+  if (e.target.name === 'workType') {
+    toggleInputsByWorkType();
+  }
+  
   if (e.target.type === 'file') {
-    const id = e.target.id;
-    const limit = FILE_LIMITS[id];
-    
+    const limit = FILE_LIMITS[e.target.id];
     if (limit && e.target.files.length > limit) {
-      alert(`この項目は最大${limit}枚までです。選択し直してください。`);
-      e.target.value = ""; // 選択をリセット
+      alert(`最大${limit}枚までです。選択し直してください。`);
+      e.target.value = "";
     }
   }
   updateButtonState();
 });
 
-// その他の入力監視
 ['staff', 'site', 'reportDate', 'workTime'].forEach(id => {
-  document.getElementById(id).addEventListener('input', updateButtonState);
+  const el = document.getElementById(id);
+  if (el) el.addEventListener('input', updateButtonState);
 });
