@@ -5,7 +5,6 @@ window.addEventListener('DOMContentLoaded', () => {
   const dateInput = document.getElementById("reportDate");
   if (dateInput) dateInput.valueAsDate = new Date();
   
-  // 初期表示時の無効化制御を実行
   toggleInputsByWorkType();
   updateButtonState();
 });
@@ -23,53 +22,42 @@ const FILE_LIMITS = {
 };
 
 /**
- * 3. 清掃区分による入力項目の有効・無効切り替え
+ * 3. 入力項目の有効・無効切り替え
  */
 function toggleInputsByWorkType() {
   const workType = document.querySelector('input[name="workType"]:checked')?.value;
   
-  // 各グループのIDリスト
   const normalIds = ['photos_amenity', 'photos_kitchen', 'photos_toilet', 'photos_bath', 'photos_living', 'photos_bedroom', 'photos_hallway', 'photos_others'];
   const regularIds = ['regular_1', 'regular_2', 'regular_3', 'regular_4', 'regular_5', 'regular_6', 'regular_7', 'regular_8'];
   const filterIds = ['photos_filter', 'workTime'];
 
-  // 有効・無効を切り替える補助関数
   const setEnable = (ids, enabled) => {
     ids.forEach(id => {
       const el = document.getElementById(id);
       if (el) {
         el.disabled = !enabled;
         el.style.opacity = enabled ? "1" : "0.3";
-        // 無効化された場合のみ、値をリセットする
         if (!enabled) el.value = ""; 
       }
     });
   };
 
-  /**
-   * 判定ロジックの修正
-   */
+  // 通常清掃（normalIds）はどの区分でも常に「true（有効）」にします
+  setEnable(normalIds, true);
+
   if (workType === 'normal') {
-    // 通常清掃のみ：通常は有効 / 定期・フィルターは無効
-    setEnable(normalIds, true);
     setEnable(regularIds, false);
     setEnable(filterIds, false);
   } 
   else if (workType === 'regular') {
-    // 定期清掃のみ：通常も有効 / 定期も有効 / フィルターのみ無効
-    setEnable(normalIds, true);
     setEnable(regularIds, true);
     setEnable(filterIds, false);
   } 
   else if (workType === 'filter') {
-    // フィルターのみ：通常は無効 / 定期も無効 / フィルターのみ有効
-    setEnable(normalIds, false);
     setEnable(regularIds, false);
     setEnable(filterIds, true);
   } 
   else if (workType === 'full') {
-    // 定期＋フィルター：すべて有効
-    setEnable(normalIds, true);
     setEnable(regularIds, true);
     setEnable(filterIds, true);
   }
@@ -128,7 +116,6 @@ async function send() {
     const allImages = [];
     for (const inputInfo of fileInputs) {
       const inputEl = document.getElementById(inputInfo.id);
-      // 無効化されている入力欄のファイルは送信対象から外す
       if (!inputEl || inputEl.disabled || !inputEl.files.length) continue;
 
       const files = Array.from(inputEl.files);
@@ -165,7 +152,7 @@ async function send() {
     alert("エラーが発生しました。");
     btn.disabled = false;
     btn.innerText = "送信";
-    if (lockLayer) lockLayer.remove();
+    lockLayer.remove();
   }
 }
 
@@ -196,7 +183,7 @@ function compressToBase64(file, maxWidth, quality) {
 }
 
 /**
- * 6. 送信ボタン制御（バリデーション）
+ * 6. バリデーション（ボタン活性化条件）
  */
 function updateButtonState() {
   const staff = document.getElementById("staff").value;
@@ -205,22 +192,20 @@ function updateButtonState() {
   const workType = document.querySelector('input[name="workType"]:checked')?.value;
   const workTime = document.getElementById("workTime").value;
 
-  // 必須項目に1枚以上あるか
   const hasNormal = ['photos_amenity', 'photos_kitchen', 'photos_toilet', 'photos_bath', 'photos_living', 'photos_bedroom', 'photos_hallway'].some(id => document.getElementById(id).files.length > 0);
   const hasRegular = ['regular_1', 'regular_2', 'regular_3', 'regular_4', 'regular_5', 'regular_6', 'regular_7'].some(id => document.getElementById(id).files.length > 0);
   const hasFilter = document.getElementById('photos_filter').files.length > 0;
 
   let isValid = false;
   if (staff && site && reportDate) {
+    // どのモードでも「通常写真」があれば送信可能とする（運用に合わせて調整可）
     if (workType === 'normal') {
       isValid = hasNormal;
     } else if (workType === 'regular') {
-      // 定期のみ：定期写真が必須（通常写真は任意扱い）
-      isValid = hasRegular;
+      isValid = hasRegular; // 定期モードなら定期写真が必須
     } else if (workType === 'filter') {
-      isValid = hasFilter && workTime;
+      isValid = hasFilter && workTime; // フィルターモードならフィルター写真と時間が必須
     } else if (workType === 'full') {
-      // 定期＋フィルター：定期とフィルター写真、時間が必須
       isValid = hasRegular && hasFilter && workTime;
     }
   }
@@ -241,7 +226,7 @@ document.addEventListener('change', (e) => {
   if (e.target.type === 'file') {
     const limit = FILE_LIMITS[e.target.id];
     if (limit && e.target.files.length > limit) {
-      alert(`最大${limit}枚までです。選択し直してください。`);
+      alert(`最大${limit}枚までです。`);
       e.target.value = "";
     }
   }
