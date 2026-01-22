@@ -6,135 +6,25 @@
   <script src="https://unpkg.com/dexie/dist/dexie.js"></script>
   
   <style>
-    * {
-      box-sizing: border-box;
-    }
-
-    body {
-      margin: 0;
-      padding: 16px;
-      font-family: -apple-system, BlinkMacSystemFont,
-                   "Segoe UI", Roboto, "Helvetica Neue", Arial;
-      font-size: 18px;
-      background-color: #f5f5f5; 
-      display: flex;
-      justify-content: center;
-    }
-
-    .container {
-      width: 100%;
-      max-width: 500px; /* パソコンで見た時の最大幅 */
-      background: #fff;
-      padding: 24px;
-      border-radius: 12px;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.1); /* 軽い影をつけて見やすく */
-    }
-
-    h2 {
-      font-size: 22px;
-      margin-top: 0;
-      margin-bottom: 20px;
-      text-align: center; /* タイトルも中央に */
-    }
-
-    .form-group {
-      margin-bottom: 16px;
-    }
-
-    label {
-      display: block;
-      margin-bottom: 4px;
-      font-weight: bold;
-    }
-
-    /* 入力欄、セレクトボックス、ボタンの共通設定 */
-    input, select, button {
-      width: 100%;             /* 横幅をコンテナいっぱいに広げる */
-      font-size: 18px;         /* 文字を大きくして読みやすく */
-      padding: 14px;           /* 内側の余白を増やして押しやすく */
-      margin: 8px 0;           /* 前後の間隔を調整 */
-      border: 1px solid #ccc;
-      border-radius: 8px;
-      background-color: #fff;
-      
-      /* iPhone独自のスタイルをリセットし、こちらの指定を優先させる */
-      display: block;
-      appearance: none;
-      -webkit-appearance: none;
-      box-sizing: border-box;  /* パディングを含めたサイズ計算にする */
-    }
-
-    /* セレクトボックス（現場名）専用の矢印装飾 */
-    select {
-      /* 右側に下向きの矢印を表示（これがないとプルダウンに見えないため） */
-      background-image: url('data:image/svg+xml;charset=UTF-8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>');
-      background-repeat: no-repeat;
-      background-position: right 14px center;
-      background-size: 18px;
-      padding-right: 40px;     /* 矢印と文字が重ならないように右側を空ける */
-      cursor: pointer;
-    }
-
-    /* 報告日（日付欄）の高さもセレクトボックスと合わせる */
-    input[type="date"] {
-      min-height: 54px;
-    }
-
-    /* ファイル選択ボタンのスタイル調整 */
-    input[type="file"] {
-      padding: 10px;
-      border: 1px dashed #aaa;
-      background: #fafafa;
-    }
-
-    button {
-      background: #4477cc;
-      color: #fff;
-      border: none;
-      cursor: pointer;
-      font-weight: bold;
-      margin-top: 20px;
-    }
-
-    button:active {
-      background: #335599;
-    }
-
-    .radio-group {
-      background: #f9f9f9;
-      padding: 10px;
-      border-radius: 8px;
-      border: 1px solid #eee;
-    }
-    .radio-item {
-      display: flex;
-      align-items: center;
-      margin-bottom: 12px;
-      cursor: pointer;
-    }
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 16px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial; font-size: 18px; background-color: #f5f5f5; display: flex; justify-content: center; }
+    .container { width: 100%; max-width: 500px; background: #fff; padding: 24px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+    h2 { font-size: 22px; margin-top: 0; margin-bottom: 20px; text-align: center; }
+    .form-group { margin-bottom: 16px; }
+    label { display: block; margin-bottom: 4px; font-weight: bold; }
+    input, select, button { width: 100%; font-size: 18px; padding: 14px; margin: 8px 0; border: 1px solid #ccc; border-radius: 8px; background-color: #fff; display: block; appearance: none; -webkit-appearance: none; box-sizing: border-box; }
+    select { background-image: url('data:image/svg+xml;charset=UTF-8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>'); background-repeat: no-repeat; background-position: right 14px center; background-size: 18px; padding-right: 40px; cursor: pointer; }
+    input[type="date"] { min-height: 54px; }
+    input[type="file"] { padding: 10px; border: 1px dashed #aaa; background: #fafafa; }
+    button { background: #4477cc; color: #fff; border: none; cursor: pointer; font-weight: bold; margin-top: 20px; }
+    button:active { background: #335599; }
+    button:disabled { background: #ccc; cursor: not-allowed; }
+    .radio-group { background: #f9f9f9; padding: 10px; border-radius: 8px; border: 1px solid #eee; }
+    .radio-item { display: flex; align-items: center; margin-bottom: 12px; cursor: pointer; }
     .radio-item:last-child { margin-bottom: 0; }
-    /* ラジオボタン自体のサイズを大きくして押しやすく */
-    input[type="radio"] {
-      appearance: auto;
-      -webkit-appearance: radio;
-      width: 24px;
-      height: 24px;
-      margin: 0 12px 0 0;
-      flex-shrink: 0;
-      cursor: pointer;
-    }
-    .radio-label {
-      font-size: 17px;
-      font-weight: normal;
-    }
-
-    .footer-logo {
-      display: block;           /* ブロック要素として扱う */
-      margin: 30px auto 0;      /* 上に30pxの余白、左右は自動で中央揃え、下は0 */
-      max-width: 150px;         /* 画像の最大幅を指定（大きすぎないように調整） */
-      width: 100%;              /* 親要素の幅に合わせて縮小 */
-      height: auto;             /* 縦横比を保持 */
-    }
+    input[type="radio"] { appearance: auto; -webkit-appearance: radio; width: 24px; height: 24px; margin: 0 12px 0 0; flex-shrink: 0; cursor: pointer; }
+    .radio-label { font-size: 17px; font-weight: normal; }
+    .footer-logo { display: block; margin: 30px auto 0; max-width: 150px; width: 100%; height: auto; }
   </style>
 </head>
 
@@ -145,164 +35,165 @@
       TOCORO清掃スタッフ専用<br>
       完了写真アップロードシステム
     </h2>
+
     <div class="form-group">
-      <label for="date">報告日：</label>
+      <label for="reportDate">報告日：</label>
       <input type="date" id="reportDate">
     </div>
     
     <div class="form-group">
-  <label for="staff">担当者名：</label>
-  <select id="staff">
-    <option value="">選択してください</option>
-    <option value="今泉とき枝">今泉とき枝</option>
-    <option value="天野勝久">天野勝久</option>
-    <option value="坂本国雄">坂本国雄</option>
-    <option value="山村哲二">山村哲二</option>
-    <option value="渡辺秀美">渡辺秀美</option>
-    <option value="副島弥生">副島弥生</option>
-    <option value="猪俣直樹">猪俣直樹</option>
-    <option value="深澤捺妃">深澤捺妃</option>
-    <option value="宮崎由美子">宮崎由美子</option>
-    <option value="荒井かおり">荒井かおり</option>
-    <option value="奥脇久美子">奥脇久美子</option>
-    <option value="吉沢麻衣子">吉沢麻衣子</option>
-    <option value="希代なおみ">希代なおみ</option>
-    <option value="高根里央菜">高根里央菜</option>
-    <option value="樫村勝巳">樫村勝巳</option>
-    <option value="羽田早百合">羽田早百合</option>
-    <option value="小林千秋">小林千秋</option>
-    <option value="松本和雄">松本和雄</option>
-    <option value="稀代彩菜">稀代彩菜</option>
-    <option value="深澤璃">深澤璃</option>
-    <option value="鈴木香菜">鈴木香菜</option>
-    <option value="萱沼亜矢乃">萱沼亜矢乃</option>
-    <option value="吉村美由紀">吉村美由紀</option>
-    <option value="桑原怜那">桑原怜那</option>
-    <option value="宮本理恵">宮本理恵</option>
-    <option value="菅谷みゆき">菅谷みゆき</option>
-    <option value="大森かれん">大森かれん</option>
-    <option value="髙村晋哉">髙村晋哉</option>
-    <option value="羽田益美">羽田益美</option>
-    <option value="渡邊暁美">渡邊暁美</option>
-    <option value="渡辺あゆか">渡辺あゆか</option>
-    <option value="舟久保志穂">舟久保志穂</option>
-    <option value="鈴木佐世">鈴木佐世</option>
-    <option value="渡辺香菜">渡辺香菜</option>
-    <option value="廣瀬麻紀子">廣瀬麻紀子</option>
-    <option value="鎌田彩佳">鎌田彩佳</option>
-    <option value="市村久美">市村久美</option>
-    <option value="志村春美">志村春美</option>
-    <option value="長田実香">長田実香</option>
-    <option value="栗林美穂">栗林美穂</option>
-    <option value="山田洵也">山田洵也</option>
-    <option value="舩木優希子">舩木優希子</option>
-    <option value="山本怜似菜">山本怜似菜</option>
-    <option value="土橋愛美">土橋愛美</option>
-    <option value="粕谷翔太">粕谷翔太</option>
-    <option value="宮下美紀">宮下美紀</option>
-    <option value="倉沢由美">倉沢由美</option>
-    <option value="中澤健">中澤健</option>
-    <option value="平井衿奈">平井衿奈</option>
-    <option value="齊藤真依">齊藤真依</option>
-    <option value="渡辺紋樺">渡辺紋樺</option>
-    <option value="池谷さき">池谷さき</option>
-    <option value="堀内瑞紀">堀内瑞紀</option>
-    <option value="渡辺真奈美">渡辺真奈美</option>
-    <option value="内田千寛">内田千寛</option>
-    <option value="小林優介">小林優介</option>
-    <option value="渡邉一輝">渡邉一輝</option>
-    <option value="宮下柊人">宮下柊人</option>
-    <option value="天野莉衣奈">天野莉衣奈</option>
-    <option value="佐久間翔大">佐久間翔大</option>
-    <option value="宮本南">宮本南</option>
-    <option value="滝口初">滝口初</option>
-    <option value="宮下龍希">宮下龍希</option>
-    <option value="山田一志">山田一志</option>
-    <option value="杉本俊子">杉本俊子</option>
-  </select>
-</div>
+      <label for="staff">担当者名：</label>
+      <select id="staff">
+        <option value="">選択してください</option>
+        <option value="今泉とき枝">今泉とき枝</option>
+        <option value="天野勝久">天野勝久</option>
+        <option value="坂本国雄">坂本国雄</option>
+        <option value="山村哲二">山村哲二</option>
+        <option value="渡辺秀美">渡辺秀美</option>
+        <option value="副島弥生">副島弥生</option>
+        <option value="猪俣直樹">猪俣直樹</option>
+        <option value="深澤捺妃">深澤捺妃</option>
+        <option value="宮崎由美子">宮崎由美子</option>
+        <option value="荒井かおり">荒井かおり</option>
+        <option value="奥脇久美子">奥脇久美子</option>
+        <option value="吉沢麻衣子">吉沢麻衣子</option>
+        <option value="希代なおみ">希代なおみ</option>
+        <option value="高根里央菜">高根里央菜</option>
+        <option value="樫村勝巳">樫村勝巳</option>
+        <option value="羽田早百合">羽田早百合</option>
+        <option value="小林千秋">小林千秋</option>
+        <option value="松本和雄">松本和雄</option>
+        <option value="稀代彩菜">稀代彩菜</option>
+        <option value="深澤璃">深澤璃</option>
+        <option value="鈴木香菜">鈴木香菜</option>
+        <option value="萱沼亜矢乃">萱沼亜矢乃</option>
+        <option value="吉村美由紀">吉村美由紀</option>
+        <option value="桑原怜那">桑原怜那</option>
+        <option value="宮本理恵">宮本理恵</option>
+        <option value="菅谷みゆき">菅谷みゆき</option>
+        <option value="大森かれん">大森かれん</option>
+        <option value="髙村晋哉">髙村晋哉</option>
+        <option value="羽田益美">羽田益美</option>
+        <option value="渡邊暁美">渡邊暁美</option>
+        <option value="渡辺あゆか">渡辺あゆか</option>
+        <option value="舟久保志穂">舟久保志穂</option>
+        <option value="鈴木佐世">鈴木佐世</option>
+        <option value="渡辺香菜">渡辺香菜</option>
+        <option value="廣瀬麻紀子">廣瀬麻紀子</option>
+        <option value="鎌田彩佳">鎌田彩佳</option>
+        <option value="市村久美">市村久美</option>
+        <option value="志村春美">志村春美</option>
+        <option value="長田実香">長田実香</option>
+        <option value="栗林美穂">栗林美穂</option>
+        <option value="山田洵也">山田洵也</option>
+        <option value="舩木優希子">舩木優希子</option>
+        <option value="山本怜似菜">山本怜似菜</option>
+        <option value="土橋愛美">土橋愛美</option>
+        <option value="粕谷翔太">粕谷翔太</option>
+        <option value="宮下美紀">宮下美紀</option>
+        <option value="倉沢由美">倉沢由美</option>
+        <option value="中澤健">中澤健</option>
+        <option value="平井衿奈">平井衿奈</option>
+        <option value="齊藤真依">齊藤真依</option>
+        <option value="渡辺紋樺">渡辺紋樺</option>
+        <option value="池谷さき">池谷さき</option>
+        <option value="堀内瑞紀">堀内瑞紀</option>
+        <option value="渡辺真奈美">渡辺真奈美</option>
+        <option value="内田千寛">内田千寛</option>
+        <option value="小林優介">小林優介</option>
+        <option value="渡邉一輝">渡邉一輝</option>
+        <option value="宮下柊人">宮下柊人</option>
+        <option value="天野莉衣奈">天野莉衣奈</option>
+        <option value="佐久間翔大">佐久間翔大</option>
+        <option value="宮本南">宮本南</option>
+        <option value="滝口初">滝口初</option>
+        <option value="宮下龍希">宮下龍希</option>
+        <option value="山田一志">山田一志</option>
+        <option value="杉本俊子">杉本俊子</option>
+      </select>
+    </div>
 
     <div class="form-group">
-  <label for="site">現場名：</label>
-  <select id="site">
-    <option value="" disabled selected>選択してください</option>
-    <option value="aoki">aoki</option>
-    <option value="APRO8">APRO8</option>
-    <option value="APRO9">APRO9</option>
-    <option value="APRO10">APRO10</option>
-    <option value="APRO11">APRO11</option>
-    <option value="APRO16">APRO16</option>
-    <option value="APRO17">APRO17</option>
-    <option value="BoccA">BoccA</option>
-    <option value="BonA">BonA</option>
-    <option value="BonB">BonB</option>
-    <option value="bettei">bettei</option>
-    <option value="C-VIEW">C-VIEW</option>
-    <option value="COZY">COZY</option>
-    <option value="Dio">Dio</option>
-    <option value="Forest">Forest</option>
-    <option value="FuA">FuA</option>
-    <option value="FuB">FuB</option>
-    <option value="Furaku-Cat">Furaku-Cat</option>
-    <option value="Furaku-Dog">Furaku-Dog</option>
-    <option value="Furaku-Poodle">Furaku-Poodle</option>
-    <option value="FV East">FV East</option>
-    <option value="FV West">FV West</option>
-    <option value="Garden">Garden</option>
-    <option value="HAZUKI">HAZUKI</option>
-    <option value="Holiday">Holiday</option>
-    <option value="Holiday A">Holiday A</option>
-    <option value="Holiday B">Holiday B</option>
-    <option value="Holiday C">Holiday C</option>
-    <option value="ID">ID</option>
-    <option value="ID2">ID2</option>
-    <option value="ID3">ID3</option>
-    <option value="ID5">ID5</option>
-    <option value="ID6">ID6</option>
-    <option value="ID7">ID7</option>
-    <option value="KoKo">KoKo</option>
-    <option value="KURA">KURA</option>
-    <option value="M-Forest">M-Forest</option>
-    <option value="M-Natural">M-Natural</option>
-    <option value="M-Traditional">M-Traditional</option>
-    <option value="Ma Maison">Ma Maison</option>
-    <option value="MITSU-House">MITSU-House</option>
-    <option value="MineMine">MineMine</option>
-    <option value="MORI">MORI</option>
-    <option value="MUTSUKI">MUTSUKI</option>
-    <option value="Nagomi">Nagomi</option>
-    <option value="pure">pure</option>
-    <option value="RAKUWA">RAKUWA</option>
-    <option value="RISA">RISA</option>
-    <option value="Serend">Serend</option>
-    <option value="SORA">SORA</option>
-    <option value="STATION">STATION</option>
-    <option value="Warabi">Warabi</option>
-    <option value="yawaragi">yawaragi</option>
-    <option value="ZURA">ZURA</option>
-    <option value="エラーブル風">エラーブル風</option>
-    <option value="エラーブル禅">エラーブル禅</option>
-    <option value="園ENN">園ENN</option>
-    <option value="金魚">金魚</option>
-    <option value="空KUU">空KUU</option>
-    <option value="湖凪">湖凪</option>
-    <option value="心">心</option>
-    <option value="さくや301">さくや301</option>
-    <option value="さくや302">さくや302</option>
-    <option value="燦々">燦々</option>
-    <option value="雫">雫</option>
-    <option value="月ノ森">月ノ森</option>
-    <option value="つるば舎">つるば舎</option>
-    <option value="響">響</option>
-    <option value="富美">富美</option>
-    <option value="ヘルシンキ">ヘルシンキ</option>
-  </select>
-</div>
+      <label for="site">現場名：</label>
+      <select id="site">
+        <option value="" disabled selected>選択してください</option>
+        <option value="aoki">aoki</option>
+        <option value="APRO8">APRO8</option>
+        <option value="APRO9">APRO9</option>
+        <option value="APRO10">APRO10</option>
+        <option value="APRO11">APRO11</option>
+        <option value="APRO16">APRO16</option>
+        <option value="APRO17">APRO17</option>
+        <option value="BoccA">BoccA</option>
+        <option value="BonA">BonA</option>
+        <option value="BonB">BonB</option>
+        <option value="bettei">bettei</option>
+        <option value="C-VIEW">C-VIEW</option>
+        <option value="COZY">COZY</option>
+        <option value="Dio">Dio</option>
+        <option value="Forest">Forest</option>
+        <option value="FuA">FuA</option>
+        <option value="FuB">FuB</option>
+        <option value="Furaku-Cat">Furaku-Cat</option>
+        <option value="Furaku-Dog">Furaku-Dog</option>
+        <option value="Furaku-Poodle">Furaku-Poodle</option>
+        <option value="FV East">FV East</option>
+        <option value="FV West">FV West</option>
+        <option value="Garden">Garden</option>
+        <option value="HAZUKI">HAZUKI</option>
+        <option value="Holiday">Holiday</option>
+        <option value="Holiday A">Holiday A</option>
+        <option value="Holiday B">Holiday B</option>
+        <option value="Holiday C">Holiday C</option>
+        <option value="ID">ID</option>
+        <option value="ID2">ID2</option>
+        <option value="ID3">ID3</option>
+        <option value="ID5">ID5</option>
+        <option value="ID6">ID6</option>
+        <option value="ID7">ID7</option>
+        <option value="KoKo">KoKo</option>
+        <option value="KURA">KURA</option>
+        <option value="M-Forest">M-Forest</option>
+        <option value="M-Natural">M-Natural</option>
+        <option value="M-Traditional">M-Traditional</option>
+        <option value="Ma Maison">Ma Maison</option>
+        <option value="MITSU-House">MITSU-House</option>
+        <option value="MineMine">MineMine</option>
+        <option value="MORI">MORI</option>
+        <option value="MUTSUKI">MUTSUKI</option>
+        <option value="Nagomi">Nagomi</option>
+        <option value="pure">pure</option>
+        <option value="RAKUWA">RAKUWA</option>
+        <option value="RISA">RISA</option>
+        <option value="Serend">Serend</option>
+        <option value="SORA">SORA</option>
+        <option value="STATION">STATION</option>
+        <option value="Warabi">Warabi</option>
+        <option value="yawaragi">yawaragi</option>
+        <option value="ZURA">ZURA</option>
+        <option value="エラーブル風">エラーブル風</option>
+        <option value="エラーブル禅">エラーブル禅</option>
+        <option value="園ENN">園ENN</option>
+        <option value="金魚">金魚</option>
+        <option value="空KUU">空KUU</option>
+        <option value="湖凪">湖凪</option>
+        <option value="心">心</option>
+        <option value="さくや301">さくや301</option>
+        <option value="さくや302">さくや302</option>
+        <option value="燦々">燦々</option>
+        <option value="雫">雫</option>
+        <option value="月ノ森">月ノ森</option>
+        <option value="つるば舎">つるば舎</option>
+        <option value="響">響</option>
+        <option value="富美">富美</option>
+        <option value="ヘルシンキ">ヘルシンキ</option>
+      </select>
+    </div>
 
-        <div class="form-group">
+    <div class="form-group">
       <label>清掃区分：</label>
       <div class="radio-group">
-         <label class="radio-item">
+        <label class="radio-item">
           <input type="radio" name="workType" value="normal" checked>
           <span class="radio-label">通常清掃のみ</span>
         </label>
@@ -322,113 +213,113 @@
     </div>
 
     <div class="form-group">
-  <label>通常清掃写真：</label>
+      <label>通常清掃写真：</label>
 
-        <div style="margin-top: 10px; margin-bottom: 15px;">
-    <label for="photos_kitchen" style="display: block; font-size: 0.9em;">【タオル＆歯ブラシセット】 5枚以下</label>
-    <input type="file" id="photos_kitchen" multiple accept="image/*">
-  </div>
+      <div style="margin-top: 10px; margin-bottom: 15px;">
+        <label for="photos_amenity" style="display: block; font-size: 0.9em;">【タオル＆歯ブラシセット】 5枚以下</label>
+        <input type="file" id="photos_amenity" multiple accept="image/*">
+      </div>
 
+      <div style="margin-bottom: 15px;">
+        <label for="photos_kitchen" style="display: block; font-size: 0.9em;">【キッチン】 15枚以下</label>
+        <input type="file" id="photos_kitchen" multiple accept="image/*">
+      </div>
 
-  <div style="margin-top: 10px; margin-bottom: 15px;">
-    <label for="photos_kitchen" style="display: block; font-size: 0.9em;">【キッチン】 15枚以下</label>
-    <input type="file" id="photos_kitchen" multiple accept="image/*">
-  </div>
+      <div style="margin-bottom: 15px;">
+        <label for="photos_toilet" style="display: block; font-size: 0.9em;">【トイレ】 10枚以下</label>
+        <input type="file" id="photos_toilet" multiple accept="image/*">
+      </div>
 
-  <div style="margin-bottom: 15px;">
-    <label for="photos_toilet" style="display: block; font-size: 0.9em;">【トイレ】 10枚以下</label>
-    <input type="file" id="photos_toilet" multiple accept="image/*">
-  </div>
+      <div style="margin-bottom: 15px;">
+        <label for="photos_bath" style="display: block; font-size: 0.9em;">【お風呂・洗面所】 15枚以下</label>
+        <input type="file" id="photos_bath" multiple accept="image/*">
+      </div>
 
-  <div style="margin-bottom: 15px;">
-    <label for="photos_bath" style="display: block; font-size: 0.9em;">【お風呂・洗面所】 15枚以下</label>
-    <input type="file" id="photos_bath" multiple accept="image/*">
-  </div>
+      <div style="margin-bottom: 15px;">
+        <label for="photos_living" style="display: block; font-size: 0.9em;">【リビング】 15枚以下</label>
+        <input type="file" id="photos_living" multiple accept="image/*">
+      </div>
 
-  <div style="margin-bottom: 15px;">
-    <label for="photos_living" style="display: block; font-size: 0.9em;">【リビング】 15枚以下</label>
-    <input type="file" id="photos_living" multiple accept="image/*">
-  </div>
+      <div style="margin-bottom: 15px;">
+        <label for="photos_bedroom" style="display: block; font-size: 0.9em;">【寝室】 15枚以下</label>
+        <input type="file" id="photos_bedroom" multiple accept="image/*">
+      </div>
 
-  <div style="margin-bottom: 15px;">
-    <label for="photos_bedroom" style="display: block; font-size: 0.9em;">【寝室】 15枚以下</label>
-    <input type="file" id="photos_bedroom" multiple accept="image/*">
-  </div>
+      <div style="margin-bottom: 15px;">
+        <label for="photos_hallway" style="display: block; font-size: 0.9em;">【廊下】 15枚以下</label>
+        <input type="file" id="photos_hallway" multiple accept="image/*">
+      </div>
 
-  <div style="margin-bottom: 15px;">
-    <label for="photos_hallway" style="display: block; font-size: 0.9em;">【廊下】 15枚以下</label>
-    <input type="file" id="photos_hallway" multiple accept="image/*">
-  </div>
+      <div style="margin-bottom: 15px;">
+        <label for="photos_others" style="display: block; font-size: 0.9em;">【物件指定の確認事項＆破損汚損個所（任意）】 10枚以下</label>
+        <input type="file" id="photos_others" multiple accept="image/*">
+      </div>
+    </div>
 
-  <div style="margin-bottom: 15px;">
-    <label for="photos_others" style="display: block; font-size: 0.9em;">【物件指定の確認事項＆破損汚損個所（任意）】 10枚以下</label>
-    <input type="file" id="photos_others" multiple accept="image/*">
-  </div>
-</div>
+    <hr style="border: 0; border-top: 1px dashed #ccc; margin: 20px 0;">
 
-  <hr style="border: 0; border-top: 1px dashed #ccc; margin: 20px 0;">
+    <div class="form-group">
+      <label style="display: block; margin-bottom: 10px; font-weight: bold;">定期清掃↓（各10枚以下）</label>
 
-  <label style="display: block; margin-bottom: 10px; font-weight: bold;">定期清掃↓（各10枚以下）</label>
+      <div style="margin-bottom: 15px;">
+        <label for="regular_1" style="display: block; font-size: 0.9em;">【リビング・共用スペース（室内）】</label>
+        <small style="color: #666; display: block; margin-bottom: 5px;">・ソファの裏 ・テレビ裏</small>
+        <input type="file" id="regular_1" multiple accept="image/*">
+      </div>
 
-  <div style="margin-bottom: 15px;">
-    <label for="regular_1" style="display: block; font-size: 0.9em;">【リビング・共用スペース（室内）】</label>
-    <small style="color: #666; display: block; margin-bottom: 5px;">・ソファの裏 ・テレビ裏</small>
-    <input type="file" id="regular_1" multiple accept="image/*">
-  </div>
+      <div style="margin-bottom: 15px;">
+        <label for="regular_2" style="display: block; font-size: 0.9em;">【寝室まわり】</label>
+        <small style="color: #666; display: block; margin-bottom: 5px;">・ベッド下</small>
+        <input type="file" id="regular_2" multiple accept="image/*">
+      </div>
 
-  <div style="margin-bottom: 15px;">
-    <label for="regular_2" style="display: block; font-size: 0.9em;">【寝室まわり】</label>
-    <small style="color: #666; display: block; margin-bottom: 5px;">・ベッド下</small>
-    <input type="file" id="regular_2" multiple accept="image/*">
-  </div>
+      <div style="margin-bottom: 15px;">
+        <label for="regular_3" style="display: block; font-size: 0.9em;">【キッチン・ダイニング】</label>
+        <small style="color: #666; display: block; margin-bottom: 5px;">・皿全部洗う ・トースター ・冷蔵庫の中全て</small>
+        <input type="file" id="regular_3" multiple accept="image/*">
+      </div>
 
-  <div style="margin-bottom: 15px;">
-    <label for="regular_3" style="display: block; font-size: 0.9em;">【キッチン・ダイニング】</label>
-    <small style="color: #666; display: block; margin-bottom: 5px;">・皿全部洗う ・トースター ・冷蔵庫の中全て</small>
-    <input type="file" id="regular_3" multiple accept="image/*">
-  </div>
+      <div style="margin-bottom: 15px;">
+        <label for="regular_4" style="display: block; font-size: 0.9em;">【浴室・洗面・トイレ（水回り）】</label>
+        <small style="color: #666; display: block; margin-bottom: 5px;">・パイプユニッシュ（お風呂、キッチン） ・洗濯槽洗浄 ・ドライヤーの埃除去</small>
+        <input type="file" id="regular_4" multiple accept="image/*">
+      </div>
 
-  <div style="margin-bottom: 15px;">
-    <label for="regular_4" style="display: block; font-size: 0.9em;">【浴室・洗面・トイレ（水回り）】</label>
-    <small style="color: #666; display: block; margin-bottom: 5px;">・パイプユニッシュ（お風呂、キッチン） ・洗濯槽洗浄 ・ドライヤーの埃除去</small>
-    <input type="file" id="regular_4" multiple accept="image/*">
-  </div>
+      <div style="margin-bottom: 15px;">
+        <label for="regular_5" style="display: block; font-size: 0.9em;">【窓・建具】</label>
+        <small style="color: #666; display: block; margin-bottom: 5px;">・窓のサン、窓ガラス</small>
+        <input type="file" id="regular_5" multiple accept="image/*">
+      </div>
 
-  <div style="margin-bottom: 15px;">
-    <label for="regular_5" style="display: block; font-size: 0.9em;">【窓・建具】</label>
-    <small style="color: #666; display: block; margin-bottom: 5px;">・窓のサン、窓ガラス</small>
-    <input type="file" id="regular_5" multiple accept="image/*">
-  </div>
+      <div style="margin-bottom: 15px;">
+        <label for="regular_6" style="display: block; font-size: 0.9em;">【屋外・外周】</label>
+        <small style="color: #666; display: block; margin-bottom: 5px;">・施設外周の蜘蛛の巣等</small>
+        <input type="file" id="regular_6" multiple accept="image/*">
+      </div>
 
-  <div style="margin-bottom: 15px;">
-    <label for="regular_6" style="display: block; font-size: 0.9em;">【屋外・外周】</label>
-    <small style="color: #666; display: block; margin-bottom: 5px;">・施設外周の蜘蛛の巣等</small>
-    <input type="file" id="regular_6" multiple accept="image/*">
-  </div>
+      <div style="margin-bottom: 15px;">
+        <label for="regular_7" style="display: block; font-size: 0.9em;">【場所横断】</label>
+        <small style="color: #666; display: block; margin-bottom: 5px;">・冊子 ・棚 ・電球（手が届く範囲で埃も除去）</small>
+        <input type="file" id="regular_7" multiple accept="image/*">
+      </div>
 
-  <div style="margin-bottom: 15px;">
-    <label for="regular_7" style="display: block; font-size: 0.9em;">【場所横断】</label>
-    <small style="color: #666; display: block; margin-bottom: 5px;">・冊子 ・棚 ・電球（手が届く範囲で埃も除去）</small>
-    <input type="file" id="regular_7" multiple accept="image/*">
-  </div>
+      <div style="margin-bottom: 15px;">
+        <label for="regular_8" style="display: block; font-size: 0.9em;">【物件指定の清掃箇所＋その他】</label>
+        <input type="file" id="regular_8" multiple accept="image/*">
+      </div>
+    </div>
 
-  <div style="margin-bottom: 15px;">
-    <label for="regular_8" style="display: block; font-size: 0.9em;">【物件指定の清掃箇所＋その他】</label>
-    <input type="file" id="regular_8" multiple accept="image/*">
-  </div>
-</div>
+    <hr style="border: 0; border-top: 1px dashed #ccc; margin: 20px 0;">
 
-  <hr style="border: 0; border-top: 1px dashed #ccc; margin: 20px 0;">
+    <div class="form-group">
+      <label>フィルター清掃写真：</label>
+      <div style="margin-top: 10px; margin-bottom: 20px; padding: 10px; border: 1px solid #eee; border-radius: 5px;">
+        <label for="photos_filter" style="display: block; font-weight: bold;">【フィルター清掃】 10枚以下</label>
+        <input type="file" id="photos_filter" multiple accept="image/*">
+      </div>
+    </div>
 
-      <div class="form-group">
-  <label>フィルター清掃写真：</label>
-
-  <div style="margin-top: 15px; margin-bottom: 20px; padding: 10px; border: 1px solid #eee; border-radius: 5px;">
-    <label for="photos_filter" style="display: block; font-weight: bold;">【フィルター清掃】 10枚以下</label>
-    <input type="file" id="photos_filter" multiple accept="image/*">
-  </div>
-
-        <div class="form-group">
+    <div class="form-group">
       <label for="workTime">フィルター清掃時間：</label>
       <select id="workTime">
         <option value="" disabled selected>選択してください</option>
@@ -454,17 +345,6 @@
     db.version(1).stores({
       queue: '++id, status' 
     });
-
-    // Service Worker（裏方の作業員）の登録
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('sw.js')
-          .then(reg => console.log('SW registered'))
-          .catch(err => console.log('SW registration failed', err));
-      });
-    }
-
-    // 以前の app.js 内のバリデーションを活かすため、ボタンを監視するなどの処理は app.js 側に記述
   </script>
 
   <script src="app.js"></script>
