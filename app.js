@@ -4,29 +4,43 @@
 window.addEventListener('DOMContentLoaded', () => {
   const dateInput = document.getElementById("reportDate");
   if (dateInput) dateInput.valueAsDate = new Date();
-
-  const workTimeSelect = document.getElementById('workTime');
-  const extraPhotosInput = document.getElementById('extraPhotos');
-  const defaultWorkType = document.querySelector('input[name="workType"]:checked');
-
-  if (workTimeSelect && extraPhotosInput && defaultWorkType && defaultWorkType.value === 'normal') {
-    workTimeSelect.disabled = true;
-    extraPhotosInput.disabled = true;
-    workTimeSelect.style.opacity = "0.5";
-    extraPhotosInput.style.opacity = "0.5";
-  }
-
   updateButtonState();
 });
 
 /**
- * 2. メイン送信関数（UI直送）
+ * 2. 各項目ごとの枚数制限設定
+ * HTMLのラベルに記載された制限枚数とIDを紐付けます
+ */
+const FILE_LIMITS = {
+  // 通常清掃
+  'photos_amenity': 5,
+  'photos_kitchen': 15,
+  'photos_toilet': 10,
+  'photos_bath': 15,
+  'photos_living': 15,
+  'photos_bedroom': 15,
+  'photos_hallway': 15,
+  'photos_others': 10,
+  // 定期清掃
+  'regular_1': 10,
+  'regular_2': 10,
+  'regular_3': 10,
+  'regular_4': 10,
+  'regular_5': 10,
+  'regular_6': 10,
+  'regular_7': 10,
+  'regular_8': 10,
+  // フィルター
+  'photos_filter': 10
+};
+
+/**
+ * 3. メイン送信関数
  */
 async function send() {
   const btn = document.getElementById("submitBtn");
   let isSuccess = false;
 
-  // 画面ロック（送信中に二度押しされないようにする）
   const lockLayer = document.createElement("div");
   lockLayer.id = "screen-lock";
   Object.assign(lockLayer.style, {
@@ -36,90 +50,81 @@ async function send() {
   document.body.appendChild(lockLayer);
 
   try {
-    // 1. 入力値の取得
     const staff = document.getElementById("staff").value;
     const site = document.getElementById("site").value;
     const reportDate = document.getElementById("reportDate").value;
-    const files = document.getElementById("photos").files;
-    const workTypeEl = document.querySelector('input[name="workType"]:checked');
-    const workType = workTypeEl ? workTypeEl.value : "";
+    const workType = document.querySelector('input[name="workType"]:checked')?.value || "";
     const workTime = document.getElementById("workTime").value;
-    const extraFiles = document.getElementById("extraPhotos").files;
-
-    if (!site || !staff || !reportDate || !workType || !files.length) {
-      alert("必須項目をすべて入力してください");
-      lockLayer.remove();
-      return;
-    }
 
     const workTypeLabels = {
       normal: "通常清掃のみ", full: "定期清掃＋フィルター清掃",
       regular: "定期清掃のみ", filter: "フィルター清掃のみ"
     };
-    const workTypeLabel = workTypeLabels[workType] || "その他";
 
-    // 2. 画像圧縮フェーズ
+    const fileInputs = [
+      { id: 'photos_amenity', label: 'タオル歯ブラシ' },
+      { id: 'photos_kitchen', label: 'キッチン' },
+      { id: 'photos_toilet', label: 'トイレ' },
+      { id: 'photos_bath', label: 'お風呂洗面' },
+      { id: 'photos_living', label: 'リビング' },
+      { id: 'photos_bedroom', label: '寝室' },
+      { id: 'photos_hallway', label: '廊下' },
+      { id: 'photos_others', label: '物件指定破損' },
+      { id: 'regular_1', label: '定期_リビング' },
+      { id: 'regular_2', label: '定期_寝室' },
+      { id: 'regular_3', label: '定期_キッチン' },
+      { id: 'regular_4', label: '定期_水回り' },
+      { id: 'regular_5', label: '定期_窓建具' },
+      { id: 'regular_6', label: '定期_屋外' },
+      { id: 'regular_7', label: '定期_場所横断' },
+      { id: 'regular_8', label: '定期_その他' },
+      { id: 'photos_filter', label: 'フィルター' }
+    ];
+
     btn.disabled = true;
     btn.innerText = "画像を圧縮中...";
 
-    const allFiles = [
-      ...Array.from(files).map(f => ({ file: f, isExtra: false })),
-      ...Array.from(extraFiles).map(f => ({ file: f, isExtra: true }))
-    ];
-
     const allImages = [];
-    for (let i = 0; i < allFiles.length; i++) {
-      const item = allFiles[i];
-      const label = item.isExtra ? `_${workTypeLabel}` : "";
-      const compressed = await compressToBase64(item.file, 800, 0.3);
+    let processedCount = 0;
 
-      allImages.push({
-        name: `${site}_(${reportDate})_${staff}${label}_${i + 1}`,
-        data: compressed,
-        isExtra: item.isExtra
-      });
-      btn.innerText = `圧縮中 (${i + 1}/${allFiles.length})`;
+    for (const inputInfo of fileInputs) {
+      const inputEl = document.getElementById(inputInfo.id);
+      if (!inputEl || !inputEl.files.length) continue;
+
+      const files = Array.from(inputEl.files);
+      for (let i = 0; i < files.length; i++) {
+        const compressed = await compressToBase64(files[i], 800, 0.3);
+        allImages.push({
+          name: `${site}_(${reportDate})_${staff}_[${inputInfo.label}]_${i + 1}`,
+          data: compressed
+        });
+        processedCount++;
+        btn.innerText = `圧縮中 (${processedCount}枚完了)`;
+      }
     }
 
-    // 3. Cloud Runへ「一括」送信
-    // ここで一気に送ることで、ブラウザ側の待ち時間を最小化します
     btn.innerText = `データを送信中...`;
-
     const response = await fetch("/upload", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        staff,
-        site,
-        reportDate,
-        workTypeLabel,
-        workTime,
-        allImages: allImages // 全画像を配列でまとめて送信
+        staff, site, reportDate,
+        workTypeLabel: workTypeLabels[workType],
+        workTime: (workType === 'full' || workType === 'filter') ? workTime : "0",
+        allImages
       })
     });
 
-    if (!response.ok) throw new Error("サーバーへの送信に失敗しました");
+    if (!response.ok) throw new Error("送信失敗");
 
-    // 4. 成功表示（ユーザーはここでスマホをしまってもOK）
     isSuccess = true;
     btn.innerText = "送信完了！";
     btn.style.background = "#28a745";
-    btn.style.color = "#fff";
-
-    const msg = document.createElement("p");
-    msg.innerHTML = "<strong>送信を受け付けました！</strong><br>裏側で処理していますので、画面を閉じても大丈夫です。";
-    msg.style.textAlign = "center";
-    msg.style.color = "#28a745";
-    msg.style.margin = "10px 0";
-
-    btn.parentNode.insertBefore(msg, btn);
-
-    // 3秒後にリロード
     setTimeout(() => location.reload(), 3000);
 
   } catch (e) {
     console.error(e);
-    alert("エラーが発生しました。通信環境を確認してください。");
+    alert("エラーが発生しました。");
     btn.disabled = false;
     btn.innerText = "送信";
   } finally {
@@ -128,108 +133,77 @@ async function send() {
 }
 
 /**
- * 3. 画像圧縮
+ * 4. 画像圧縮
  */
 function compressToBase64(file, maxWidth, quality) {
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     const reader = new FileReader();
     reader.onload = e => {
       const img = new Image();
       img.onload = () => {
         const canvas = document.createElement("canvas");
         let { width, height } = img;
-
         if (width > maxWidth) {
           height = Math.round(height * maxWidth / width);
           width = maxWidth;
         }
-
         canvas.width = width;
         canvas.height = height;
         canvas.getContext("2d").drawImage(img, 0, 0, width, height);
         resolve(canvas.toDataURL("image/jpeg", quality));
       };
-      img.onerror = () => reject(new Error("画像デコード失敗"));
       img.src = e.target.result;
     };
-    reader.onerror = () => reject(new Error("FileReader失敗"));
     reader.readAsDataURL(file);
   });
 }
 
 /**
- * 4. 清掃区分切替
- */
-document.addEventListener('change', e => {
-  if (e.target.name !== 'workType') return;
-
-  const workTime = document.getElementById('workTime');
-  const extraPhotos = document.getElementById('extraPhotos');
-
-  if (e.target.value === 'normal') {
-    workTime.disabled = true;
-    workTime.value = "";
-    extraPhotos.disabled = true;
-    extraPhotos.value = "";
-    workTime.style.opacity = extraPhotos.style.opacity = "0.5";
-  } else if (e.target.value === 'regular') {
-    workTime.disabled = true;
-    workTime.value = "";
-    extraPhotos.disabled = false;
-    workTime.style.opacity = "0.5";
-    extraPhotos.style.opacity = "1";
-  } else {
-    workTime.disabled = false;
-    extraPhotos.disabled = false;
-    workTime.style.opacity = extraPhotos.style.opacity = "1";
-  }
-
-  updateButtonState();
-});
-
-/**
- * 5. 枚数制限
- */
-const checkFileCount = e => {
-  if (e.target.files.length > 100) {
-    alert("一度に選択できるのは100枚までです");
-    e.target.value = "";
-  }
-};
-
-document.getElementById('photos').addEventListener('change', checkFileCount);
-document.getElementById('extraPhotos').addEventListener('change', checkFileCount);
-
-/**
- * 6. 送信ボタン制御
+ * 5. 送信ボタン制御
  */
 function updateButtonState() {
   const staff = document.getElementById("staff").value;
   const site = document.getElementById("site").value;
   const reportDate = document.getElementById("reportDate").value;
-  const files = document.getElementById("photos").files;
   const workType = document.querySelector('input[name="workType"]:checked')?.value;
   const workTime = document.getElementById("workTime").value;
-  const extraFiles = document.getElementById("extraPhotos").files;
-  const btn = document.getElementById("submitBtn");
 
-  let valid = staff && site && reportDate && workType && files.length;
+  // バリデーション用：必須項目に写真が入っているかチェック
+  const hasNormalPhotos = ['photos_amenity', 'photos_kitchen', 'photos_toilet', 'photos_bath', 'photos_living', 'photos_bedroom', 'photos_hallway'].some(id => document.getElementById(id).files.length > 0);
+  const hasRegularPhotos = ['regular_1', 'regular_2', 'regular_3', 'regular_4', 'regular_5', 'regular_6', 'regular_7'].some(id => document.getElementById(id).files.length > 0);
+  const hasFilterPhotos = document.getElementById('photos_filter').files.length > 0;
 
-  if (workType === 'full' || workType === 'filter') {
-    valid = valid && workTime && extraFiles.length;
-  } else if (workType === 'regular') {
-    valid = valid && extraFiles.length;
+  let isValid = false;
+  if (staff && site && reportDate) {
+    if (workType === 'normal') isValid = hasNormalPhotos;
+    else if (workType === 'regular') isValid = hasRegularPhotos;
+    else if (workType === 'filter') isValid = hasFilterPhotos && workTime;
+    else if (workType === 'full') isValid = hasRegularPhotos && hasFilterPhotos && workTime;
   }
 
-  btn.disabled = !valid;
-  btn.style.opacity = valid ? "1" : "0.5";
+  const btn = document.getElementById("submitBtn");
+  btn.disabled = !isValid;
+  btn.style.opacity = isValid ? "1" : "0.5";
 }
 
-['staff', 'site', 'reportDate', 'workTime']
-  .forEach(id => document.getElementById(id).addEventListener('input', updateButtonState));
+/**
+ * 6. イベント設定（枚数制限チェック含む）
+ */
+document.addEventListener('change', (e) => {
+  // ファイル入力の場合
+  if (e.target.type === 'file') {
+    const id = e.target.id;
+    const limit = FILE_LIMITS[id];
+    
+    if (limit && e.target.files.length > limit) {
+      alert(`この項目は最大${limit}枚までです。選択し直してください。`);
+      e.target.value = ""; // 選択をリセット
+    }
+  }
+  updateButtonState();
+});
 
-document.getElementsByName('workType')
-  .forEach(el => el.addEventListener('change', updateButtonState));
-
-document.getElementById('photos').addEventListener('change', updateButtonState);
-document.getElementById('extraPhotos').addEventListener('change', updateButtonState);
+// その他の入力監視
+['staff', 'site', 'reportDate', 'workTime'].forEach(id => {
+  document.getElementById(id).addEventListener('input', updateButtonState);
+});
