@@ -135,20 +135,32 @@ async function send() {
 
     btn.innerText = `データを送信中...`;
     
-    // 順番に送信（サーバー負荷軽減のため）
-    for (let i = 0; i < allImages.length; i++) {
-      btn.innerText = `送信中 (${i + 1}/${allImages.length})`;
-      const response = await fetch("/upload", {
-        method: "POST",
-        body: JSON.stringify({
-          staff, site, reportDate,
-          workTypeLabel: workTypeLabels[workType],
-          workTime: workTime || "0",
-          singleImage: allImages[i]
-        })
-      });
-      if (!response.ok) throw new Error("送信失敗");
-    }
+// --- App.js 修正版 ---
+
+btn.innerText = `データをサーバーへ送信中...`;
+
+// ループはさせず、1回の fetch で全データを送る
+const response = await fetch("/upload", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json"
+  },
+  body: JSON.stringify({
+    staff,
+    site,
+    reportDate,
+    workTypeLabel: workTypeLabels[workType],
+    workTime: workTime || "0",
+    allImages: allImages // 圧縮済みの全画像が入った配列を渡す
+  })
+});
+
+if (!response.ok) throw new Error("サーバーへの送信に失敗しました");
+
+// サーバーがデータを受け取った時点で「送信完了」とする
+btn.innerText = "送信完了！(裏側で保存中)";
+btn.style.background = "#28a745";
+setTimeout(() => location.reload(), 2000);
 
     btn.innerText = "送信完了！";
     btn.style.background = "#28a745";
