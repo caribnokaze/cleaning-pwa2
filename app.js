@@ -138,7 +138,7 @@ async function send() {
     // 順番に送信（サーバー負荷軽減のため）
     for (let i = 0; i < allImages.length; i++) {
       btn.innerText = `送信中 (${i + 1}/${allImages.length})`;
-      const response = await fetch(window.location.href, { // GASのデプロイURLに合わせて調整
+      const response = await fetch("/upload", {
         method: "POST",
         body: JSON.stringify({
           staff, site, reportDate,
