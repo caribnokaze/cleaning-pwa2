@@ -22,22 +22,32 @@ app.post('/upload', (req, res) => {
     sendToGas(data);
 });
 
+// --- Server.js の sendToGas 関数 ---
+
 async function sendToGas(data) {
     try {
         const { allImages, ...info } = data;
         console.log(`Starting background upload of ${allImages.length} images...`);
 
         for (let i = 0; i < allImages.length; i++) {
+            // axios.post の第3引数にオプションを追加
             await axios.post(GAS_URL, {
                 ...info,
                 singleImage: allImages[i]
+            }, {
+                maxRedirects: 5, // GASのリダイレクトを許可
+                headers: { 'Content-Type': 'application/json' }
             });
-            console.log(`GAS upload: ${i + 1}/${allImages.length}`);
-            // GASがパンクしないよう少し待つ
-            await new Promise(r => setTimeout(r, 500));
+
+            console.log(`GAS upload success: ${i + 1}/${allImages.length}`);
+            
+            // GAS側のロック競合を避けるため、待機時間を1秒(1000ms)に推奨
+            await new Promise(r => setTimeout(r, 1000));
         }
+        console.log("--- All background processes completed ---");
     } catch (error) {
-        console.error("Error:", error.message);
+        // エラー内容を詳しくログ出力
+        console.error("GAS Upload Error:", error.response ? error.response.status : error.message);
     }
 }
 
