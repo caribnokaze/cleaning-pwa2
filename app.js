@@ -5,8 +5,17 @@ window.addEventListener('DOMContentLoaded', () => {
   const dateInput = document.getElementById("reportDate");
   if (dateInput) dateInput.valueAsDate = new Date();
   
+  // 初期状態の反映
   toggleInputsByWorkType();
   updateButtonState();
+
+  // ラジオボタンの変更イベントを個別に登録（確実性を高めるため）
+  document.querySelectorAll('input[name="workType"]').forEach(radio => {
+    radio.addEventListener('change', () => {
+      toggleInputsByWorkType();
+      updateButtonState();
+    });
+  });
 });
 
 /**
@@ -26,7 +35,8 @@ const FILE_LIMITS = {
  */
 function toggleInputsByWorkType() {
   const workType = document.querySelector('input[name="workType"]:checked')?.value;
-  
+  if (!workType) return;
+
   const normalIds = ['photos_amenity', 'photos_kitchen', 'photos_toilet', 'photos_bath', 'photos_living', 'photos_bedroom', 'photos_hallway', 'photos_others'];
   const regularIds = ['regular_1', 'regular_2', 'regular_3', 'regular_4', 'regular_5', 'regular_6', 'regular_7', 'regular_8'];
   const filterIds = ['photos_filter', 'workTime'];
@@ -36,31 +46,20 @@ function toggleInputsByWorkType() {
       const el = document.getElementById(id);
       if (el) {
         el.disabled = !enabled;
+        // input自体の透明度だけでなく、親要素(label等)も含めて視覚的に無効化
         el.style.opacity = enabled ? "1" : "0.3";
+        if (el.parentElement) el.parentElement.style.opacity = enabled ? "1" : "0.3";
         if (!enabled) el.value = ""; 
       }
     });
   };
 
-  // 通常清掃（normalIds）はどの区分でも常に「true（有効）」にします
+  // 通常清掃は常に有効
   setEnable(normalIds, true);
 
-  if (workType === 'normal') {
-    setEnable(regularIds, false);
-    setEnable(filterIds, false);
-  } 
-  else if (workType === 'regular') {
-    setEnable(regularIds, true);
-    setEnable(filterIds, false);
-  } 
-  else if (workType === 'filter') {
-    setEnable(regularIds, false);
-    setEnable(filterIds, true);
-  } 
-  else if (workType === 'full') {
-    setEnable(regularIds, true);
-    setEnable(filterIds, true);
-  }
+  // モード別の有効化
+  setEnable(regularIds, (workType === 'regular' || workType === 'full'));
+  setEnable(filterIds, (workType === 'filter' || workType === 'full'));
 }
 
 /**
@@ -68,13 +67,13 @@ function toggleInputsByWorkType() {
  */
 async function send() {
   const btn = document.getElementById("submitBtn");
-  let isSuccess = false;
-
+  
+  // 画面ロック
   const lockLayer = document.createElement("div");
   lockLayer.id = "screen-lock";
   Object.assign(lockLayer.style, {
     position: "fixed", top: "0", left: "0", width: "100%", height: "100%",
-    background: "rgba(0,0,0,0.1)", zIndex: "9999", cursor: "not-allowed"
+    background: "rgba(0,0,0,0.2)", zIndex: "9999", cursor: "wait"
   });
   document.body.appendChild(lockLayer);
 
@@ -91,23 +90,23 @@ async function send() {
     };
 
     const fileInputs = [
-      { id: 'photos_amenity', label: 'タオル歯ブラシ' },
-      { id: 'photos_kitchen', label: 'キッチン' },
-      { id: 'photos_toilet', label: 'トイレ' },
-      { id: 'photos_bath', label: 'お風呂洗面' },
-      { id: 'photos_living', label: 'リビング' },
-      { id: 'photos_bedroom', label: '寝室' },
-      { id: 'photos_hallway', label: '廊下' },
-      { id: 'photos_others', label: '物件指定破損' },
-      { id: 'regular_1', label: '定期_リビング' },
-      { id: 'regular_2', label: '定期_寝室' },
-      { id: 'regular_3', label: '定期_キッチン' },
-      { id: 'regular_4', label: '定期_水回り' },
-      { id: 'regular_5', label: '定期_窓建具' },
-      { id: 'regular_6', label: '定期_屋外' },
-      { id: 'regular_7', label: '定期_場所横断' },
-      { id: 'regular_8', label: '定期_その他' },
-      { id: 'photos_filter', label: 'フィルター' }
+      { id: 'photos_amenity', label: 'タオル歯ブラシ', category: 'normal' },
+      { id: 'photos_kitchen', label: 'キッチン', category: 'normal' },
+      { id: 'photos_toilet', label: 'トイレ', category: 'normal' },
+      { id: 'photos_bath', label: 'お風呂洗面', category: 'normal' },
+      { id: 'photos_living', label: 'リビング', category: 'normal' },
+      { id: 'photos_bedroom', label: '寝室', category: 'normal' },
+      { id: 'photos_hallway', label: '廊下', category: 'normal' },
+      { id: 'photos_others', label: '物件指定破損', category: 'normal' },
+      { id: 'regular_1', label: '定期_リビング', category: 'regular' },
+      { id: 'regular_2', label: '定期_寝室', category: 'regular' },
+      { id: 'regular_3', label: '定期_キッチン', category: 'regular' },
+      { id: 'regular_4', label: '定期_水回り', category: 'regular' },
+      { id: 'regular_5', label: '定期_窓建具', category: 'regular' },
+      { id: 'regular_6', label: '定期_屋外', category: 'regular' },
+      { id: 'regular_7', label: '定期_場所横断', category: 'regular' },
+      { id: 'regular_8', label: '定期_その他', category: 'regular' },
+      { id: 'photos_filter', label: 'フィルター', category: 'filter' }
     ];
 
     btn.disabled = true;
@@ -121,39 +120,46 @@ async function send() {
       const files = Array.from(inputEl.files);
       for (let i = 0; i < files.length; i++) {
         const compressed = await compressToBase64(files[i], 800, 0.3);
+        
+        // isExtra判定: カテゴリが'normal'でなければtrue
+        const isExtra = inputInfo.category !== 'normal';
+
         allImages.push({
-          name: `${site}_(${reportDate})_${staff}_[${inputInfo.label}]_${i + 1}`,
-          data: compressed
+          id: inputInfo.id,
+          label: inputInfo.label,
+          data: compressed,
           isExtra: isExtra
         });
       }
     }
 
     btn.innerText = `データを送信中...`;
-    const response = await fetch("/upload", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        staff, site, reportDate,
-        workTypeLabel: workTypeLabels[workType],
-        workTime: workTime || "0",
-        allImages
-      })
-    });
+    
+    // 順番に送信（サーバー負荷軽減のため）
+    for (let i = 0; i < allImages.length; i++) {
+      btn.innerText = `送信中 (${i + 1}/${allImages.length})`;
+      const response = await fetch(window.location.href, { // GASのデプロイURLに合わせて調整
+        method: "POST",
+        body: JSON.stringify({
+          staff, site, reportDate,
+          workTypeLabel: workTypeLabels[workType],
+          workTime: workTime || "0",
+          singleImage: allImages[i]
+        })
+      });
+      if (!response.ok) throw new Error("送信失敗");
+    }
 
-    if (!response.ok) throw new Error("送信失敗");
-
-    isSuccess = true;
     btn.innerText = "送信完了！";
     btn.style.background = "#28a745";
-    setTimeout(() => location.reload(), 3000);
+    setTimeout(() => location.reload(), 2000);
 
   } catch (e) {
     console.error(e);
     alert("エラーが発生しました。");
     btn.disabled = false;
     btn.innerText = "送信";
-    lockLayer.remove();
+    if (document.getElementById("screen-lock")) document.getElementById("screen-lock").remove();
   }
 }
 
@@ -174,7 +180,8 @@ function compressToBase64(file, maxWidth, quality) {
         }
         canvas.width = width;
         canvas.height = height;
-        canvas.getContext("2d").drawImage(img, 0, 0, width, height);
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0, width, height);
         resolve(canvas.toDataURL("image/jpeg", quality));
       };
       img.src = e.target.result;
@@ -187,43 +194,47 @@ function compressToBase64(file, maxWidth, quality) {
  * 6. バリデーション（ボタン活性化条件）
  */
 function updateButtonState() {
-  const staff = document.getElementById("staff").value;
-  const site = document.getElementById("site").value;
-  const reportDate = document.getElementById("reportDate").value;
+  const staff = document.getElementById("staff")?.value.trim();
+  const site = document.getElementById("site")?.value.trim();
+  const reportDate = document.getElementById("reportDate")?.value;
   const workType = document.querySelector('input[name="workType"]:checked')?.value;
-  const workTime = document.getElementById("workTime").value;
+  const workTime = document.getElementById("workTime")?.value;
 
-  const hasNormal = ['photos_amenity', 'photos_kitchen', 'photos_toilet', 'photos_bath', 'photos_living', 'photos_bedroom', 'photos_hallway'].some(id => document.getElementById(id).files.length > 0);
-  const hasRegular = ['regular_1', 'regular_2', 'regular_3', 'regular_4', 'regular_5', 'regular_6', 'regular_7'].some(id => document.getElementById(id).files.length > 0);
-  const hasFilter = document.getElementById('photos_filter').files.length > 0;
+  const normalIds = ['photos_amenity', 'photos_kitchen', 'photos_toilet', 'photos_bath', 'photos_living', 'photos_bedroom', 'photos_hallway'];
+  const regularIds = ['regular_1', 'regular_2', 'regular_3', 'regular_4', 'regular_5', 'regular_6', 'regular_7', 'regular_8'];
+
+  const hasNormal = normalIds.some(id => (document.getElementById(id)?.files?.length || 0) > 0);
+  const hasRegular = regularIds.some(id => (document.getElementById(id)?.files?.length || 0) > 0);
+  const hasFilter = (document.getElementById('photos_filter')?.files?.length || 0) > 0;
 
   let isValid = false;
+
   if (staff && site && reportDate) {
-    // どのモードでも「通常写真」があれば送信可能とする（運用に合わせて調整可）
+    // 全てのモードで「通常清掃」のいずれかの写真があることを必須とする
     if (workType === 'normal') {
       isValid = hasNormal;
     } else if (workType === 'regular') {
-      isValid = hasRegular; // 定期モードなら定期写真が必須
+      isValid = hasNormal && hasRegular;
     } else if (workType === 'filter') {
-      isValid = hasFilter && workTime; // フィルターモードならフィルター写真と時間が必須
+      isValid = hasNormal && hasFilter && workTime;
     } else if (workType === 'full') {
-      isValid = hasRegular && hasFilter && workTime;
+      isValid = hasNormal && hasRegular && hasFilter && workTime;
     }
   }
 
   const btn = document.getElementById("submitBtn");
-  btn.disabled = !isValid;
-  btn.style.opacity = isValid ? "1" : "0.5";
+  if (btn) {
+    btn.disabled = !isValid;
+    btn.style.opacity = isValid ? "1" : "0.5";
+    btn.style.cursor = isValid ? "pointer" : "not-allowed";
+  }
 }
 
 /**
  * 7. イベント設定
  */
 document.addEventListener('change', (e) => {
-  if (e.target.name === 'workType') {
-    toggleInputsByWorkType();
-  }
-  
+  // ファイル枚数制限
   if (e.target.type === 'file') {
     const limit = FILE_LIMITS[e.target.id];
     if (limit && e.target.files.length > limit) {
@@ -234,6 +245,7 @@ document.addEventListener('change', (e) => {
   updateButtonState();
 });
 
+// 入力フィールドの監視
 ['staff', 'site', 'reportDate', 'workTime'].forEach(id => {
   const el = document.getElementById(id);
   if (el) el.addEventListener('input', updateButtonState);
