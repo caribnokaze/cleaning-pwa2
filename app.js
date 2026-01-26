@@ -124,6 +124,7 @@ async function send() {
         allImages.push({
           name: `${site}_(${reportDate})_${staff}_[${inputInfo.label}]_${i + 1}`,
           data: compressed
+          isExtra: isExtra
         });
       }
     }
