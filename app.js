@@ -47,8 +47,8 @@ function toggleInputsByWorkType() {
       if (el) {
         el.disabled = !enabled;
         // input自体の透明度だけでなく、親要素(label等)も含めて視覚的に無効化
-        el.style.opacity = enabled ? "1" : "0.3";
-        if (el.parentElement) el.parentElement.style.opacity = enabled ? "1" : "0.3";
+        el.style.opacity = enabled ? "1" : "0.5";
+        if (el.parentElement) el.parentElement.style.opacity = enabled ? "1" : "0.5";
         if (!enabled) el.value = ""; 
       }
     });
