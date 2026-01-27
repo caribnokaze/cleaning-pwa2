@@ -38,26 +38,30 @@ function toggleInputsByWorkType() {
   if (!workType) return;
 
   const normalIds = ['label_normal_title', 'photos_amenity', 'photos_kitchen', 'photos_toilet', 'photos_bath', 'photos_living', 'photos_bedroom', 'photos_hallway', 'photos_others'];
-  const regularIds = ['label_regular_title', 'regular_1', 'regular_2', 'regular_3', 'regular_4', 'regular_5', 'regular_6', 'regular_7', 'regular_8'];
-  const filterIds = ['photos_filter', 'workTime'];
+  const regularIds = ['label_regular_title', 'group_regular', 'regular_1', 'regular_2', 'regular_3', 'regular_4', 'regular_5', 'regular_6', 'regular_7', 'regular_8'];
+  // ラベルのIDを追加
+  const filterIds = ['label_filter_title', 'label_workTime_title', 'photos_filter', 'workTime'];
 
   const setEnable = (ids, enabled) => {
     ids.forEach(id => {
       const el = document.getElementById(id);
       if (el) {
-        el.disabled = !enabled;
-        // input自体の透明度だけでなく、親要素(label等)も含めて視覚的に無効化
-        el.style.opacity = enabled ? "1" : "0.5";
-        if (el.parentElement) el.parentElement.style.opacity = enabled ? "1" : "0.5";
-        if (!enabled) el.value = ""; 
+        // 有効・無効の切り替え
+        if (el.tagName === 'INPUT' || el.tagName === 'SELECT') {
+          el.disabled = !enabled;
+          if (!enabled) el.value = ""; 
+          
+          // input系の場合は、その親(div)ごと薄くする（これでラベルも連動する）
+          if (el.parentElement) el.parentElement.style.opacity = enabled ? "1" : "0.5";
+        } else {
+          // 単体のラベルやdivの場合
+          el.style.opacity = enabled ? "1" : "0.5";
+        }
       }
     });
   };
 
-  // 通常清掃は常に有効
   setEnable(normalIds, true);
-
-  // モード別の有効化
   setEnable(regularIds, (workType === 'regular' || workType === 'full'));
   setEnable(filterIds, (workType === 'filter' || workType === 'full'));
 }
