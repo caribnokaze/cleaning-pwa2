@@ -16,6 +16,22 @@ window.addEventListener('DOMContentLoaded', () => {
       updateButtonState();
     });
   });
+
+  const memoEl = document.getElementById("memo");
+  const charCountEl = document.getElementById("charCount");
+
+  if (memoEl && charCountEl) {
+    memoEl.addEventListener('input', () => {
+      const len = memoEl.value.length;
+      charCountEl.innerText = `${len} / 200`;
+      
+      // 200文字を超えたら数字を赤くする（保険）
+      charCountEl.style.color = len > 200 ? "red" : "#666";
+      
+      // 文字が変わるたびに送信ボタンの活性・非活性をチェック
+      updateButtonState();
+    });
+  }
 });
 
 /**
