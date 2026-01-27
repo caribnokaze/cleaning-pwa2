@@ -37,8 +37,8 @@ function toggleInputsByWorkType() {
   const workType = document.querySelector('input[name="workType"]:checked')?.value;
   if (!workType) return;
 
-  const normalIds = ['photos_amenity', 'photos_kitchen', 'photos_toilet', 'photos_bath', 'photos_living', 'photos_bedroom', 'photos_hallway', 'photos_others'];
-  const regularIds = ['regular_1', 'regular_2', 'regular_3', 'regular_4', 'regular_5', 'regular_6', 'regular_7', 'regular_8'];
+  const normalIds = ['label_normal_title', 'photos_amenity', 'photos_kitchen', 'photos_toilet', 'photos_bath', 'photos_living', 'photos_bedroom', 'photos_hallway', 'photos_others'];
+  const regularIds = ['label_regular_title', 'regular_1', 'regular_2', 'regular_3', 'regular_4', 'regular_5', 'regular_6', 'regular_7', 'regular_8'];
   const filterIds = ['photos_filter', 'workTime'];
 
   const setEnable = (ids, enabled) => {
