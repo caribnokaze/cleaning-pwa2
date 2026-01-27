@@ -37,35 +37,49 @@ function toggleInputsByWorkType() {
   const workType = document.querySelector('input[name="workType"]:checked')?.value;
   if (!workType) return;
 
-  const normalIds = ['label_normal_title', 'photos_amenity', 'photos_kitchen', 'photos_toilet', 'photos_bath', 'photos_living', 'photos_bedroom', 'photos_hallway', 'photos_others'];
-  const regularIds = ['label_regular_title', 'group_regular', 'regular_1', 'regular_2', 'regular_3', 'regular_4', 'regular_5', 'regular_6', 'regular_7', 'regular_8'];
-  // ラベルのIDを追加
-  const filterIds = ['label_filter_title', 'label_workTime_title', 'photos_filter', 'workTime'];
+  // 外枠（エリア）のIDリスト
+  const regularAreas = ['area_regular'];
+  const filterAreas = ['area_filter_photo', 'area_workTime'];
 
-  const setEnable = (ids, enabled) => {
-    ids.forEach(id => {
+  // 入力項目のIDリスト
+  const regularInputs = ['regular_1', 'regular_2', 'regular_3', 'regular_4', 'regular_5', 'regular_6', 'regular_7', 'regular_8'];
+  const filterInputs = ['photos_filter', 'workTime'];
+
+  /**
+   * 制御用サブ関数
+   * @param {string[]} areaIds - 半透明にする親要素のID
+   * @param {string[]} inputIds - disabledにする入力要素のID
+   * @param {boolean} enabled - 有効にするかどうか
+   */
+  const updateUI = (areaIds, inputIds, enabled) => {
+    // 1. 親要素（ラベル等を含む箱）の透明度を設定
+    areaIds.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.style.opacity = enabled ? "1" : "0.5";
+    });
+
+    // 2. 入力項目の有効化・リセット
+    inputIds.forEach(id => {
       const el = document.getElementById(id);
       if (el) {
-        // 有効・無効の切り替え
-        if (el.tagName === 'INPUT' || el.tagName === 'SELECT') {
-          el.disabled = !enabled;
-          if (!enabled) el.value = ""; 
-          
-          // input系の場合は、その親(div)ごと薄くする（これでラベルも連動する）
-          if (el.parentElement) el.parentElement.style.opacity = enabled ? "1" : "0.5";
-        } else {
-          // 単体のラベルやdivの場合
-          el.style.opacity = enabled ? "1" : "0.5";
-        }
+        el.disabled = !enabled;
+        if (!enabled) el.value = ""; 
       }
     });
   };
 
-  setEnable(normalIds, true);
-  setEnable(regularIds, (workType === 'regular' || workType === 'full'));
-  setEnable(filterIds, (workType === 'filter' || workType === 'full'));
-}
+  // 通常清掃（area_normal）は常に有効（opacity: 1）とする
+  const areaNormal = document.getElementById('area_normal');
+  if (areaNormal) areaNormal.style.opacity = "1";
 
+  // モード別の判定
+  const isRegularActive = (workType === 'regular' || workType === 'full');
+  const isFilterActive = (workType === 'filter' || workType === 'full');
+
+  // 反映
+  updateUI(regularAreas, regularInputs, isRegularActive);
+  updateUI(filterAreas, filterInputs, isFilterActive);
+}
 /**
  * 4. メイン送信関数
  */
