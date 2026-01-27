@@ -38,7 +38,7 @@ function toggleInputsByWorkType() {
   if (!workType) return;
 
   const normalIds = ['photos_amenity', 'photos_kitchen', 'photos_toilet', 'photos_bath', 'photos_living', 'photos_bedroom', 'photos_hallway', 'photos_others'];
-  const regularIds = ['group_regular','regular_1', 'regular_2', 'regular_3', 'regular_4', 'regular_5', 'regular_6', 'regular_7', 'regular_8'];
+  const regularIds = ['regular_1', 'regular_2', 'regular_3', 'regular_4', 'regular_5', 'regular_6', 'regular_7', 'regular_8'];
   const filterIds = ['photos_filter', 'workTime'];
 
   const setEnable = (ids, enabled) => {
