@@ -167,7 +167,7 @@ async function send() {
     if (!response.ok) throw new Error("サーバーへの送信に失敗しました");
 
     // 送信成功時の表示
-    btn.innerText = "送信完了！(バックグラウンド処理中)";
+    btn.innerText = "送信完了！";
     btn.style.background = "#28a745";
 
     setTimeout(() => {
