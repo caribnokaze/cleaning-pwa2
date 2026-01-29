@@ -3,13 +3,14 @@
  */
 window.addEventListener('DOMContentLoaded', () => {
   const dateInput = document.getElementById("reportDate");
-  if (dateInput) dateInput.valueAsDate = new Date();
+  if (dateInput) {
+    const today = new Date().toISOString().split('T')[0];
+    dateInput.value = today;
+  }
   
-  // 初期状態の反映
   toggleInputsByWorkType();
   updateButtonState();
 
-  // ラジオボタンの変更イベントを個別に登録（確実性を高めるため）
   document.querySelectorAll('input[name="workType"]').forEach(radio => {
     radio.addEventListener('change', () => {
       toggleInputsByWorkType();
@@ -19,16 +20,11 @@ window.addEventListener('DOMContentLoaded', () => {
 
   const memoEl = document.getElementById("memo");
   const charCountEl = document.getElementById("charCount");
-
   if (memoEl && charCountEl) {
     memoEl.addEventListener('input', () => {
       const len = memoEl.value.length;
       charCountEl.innerText = `${len} / 200`;
-      
-      // 200文字を超えたら数字を赤くする（保険）
       charCountEl.style.color = len > 200 ? "red" : "#666";
-      
-      // 文字が変わるたびに送信ボタンの活性・非活性をチェック
       updateButtonState();
     });
   }
@@ -53,28 +49,16 @@ function toggleInputsByWorkType() {
   const workType = document.querySelector('input[name="workType"]:checked')?.value;
   if (!workType) return;
 
-  // 外枠（エリア）のIDリスト
   const regularAreas = ['area_regular'];
   const filterAreas = ['area_filter_photo', 'area_workTime'];
-
-  // 入力項目のIDリスト
   const regularInputs = ['regular_1', 'regular_2', 'regular_3', 'regular_4', 'regular_5', 'regular_6', 'regular_7', 'regular_8'];
   const filterInputs = ['photos_filter', 'workTime'];
 
-  /**
-   * 制御用サブ関数
-   * @param {string[]} areaIds - 半透明にする親要素のID
-   * @param {string[]} inputIds - disabledにする入力要素のID
-   * @param {boolean} enabled - 有効にするかどうか
-   */
   const updateUI = (areaIds, inputIds, enabled) => {
-    // 1. 親要素（ラベル等を含む箱）の透明度を設定
     areaIds.forEach(id => {
       const el = document.getElementById(id);
       if (el) el.style.opacity = enabled ? "1" : "0.5";
     });
-
-    // 2. 入力項目の有効化・リセット
     inputIds.forEach(id => {
       const el = document.getElementById(id);
       if (el) {
@@ -84,25 +68,22 @@ function toggleInputsByWorkType() {
     });
   };
 
-  // 通常清掃（area_normal）は常に有効（opacity: 1）とする
   const areaNormal = document.getElementById('area_normal');
   if (areaNormal) areaNormal.style.opacity = "1";
 
-  // モード別の判定
   const isRegularActive = (workType === 'regular' || workType === 'full');
   const isFilterActive = (workType === 'filter' || workType === 'full');
 
-  // 反映
   updateUI(regularAreas, regularInputs, isRegularActive);
   updateUI(filterAreas, filterInputs, isFilterActive);
 }
+
 /**
  * 4. メイン送信関数
  */
 async function send() {
   const btn = document.getElementById("submitBtn");
   
-  // 画面ロック
   const lockLayer = document.createElement("div");
   lockLayer.id = "screen-lock";
   Object.assign(lockLayer.style, {
@@ -154,10 +135,7 @@ async function send() {
       const files = Array.from(inputEl.files);
       for (let i = 0; i < files.length; i++) {
         const compressed = await compressToBase64(files[i], 800, 0.3);
-        
-        // isExtra判定: カテゴリが'normal'でなければtrue
         const isExtra = inputInfo.category !== 'normal';
-
         allImages.push({
           id: inputInfo.id,
           label: inputInfo.label,
@@ -168,41 +146,92 @@ async function send() {
     }
 
     btn.innerText = `データを送信中...`;
-    
-// --- App.js 修正版 ---
 
-btn.innerText = `データをサーバーへ送信中...`;
+    const response = await fetch("/upload", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        staff,
+        site,
+        reportDate,
+        workTypeLabel: workTypeLabels[workType],
+        workTime: workTime || "0",
+        allImages: allImages
+      })
+    });
 
-// ループはさせず、1回の fetch で全データを送る
-const response = await fetch("/upload", {
-  method: "POST",
-  headers: {
-    "Content-Type": "application/json"
-  },
-  body: JSON.stringify({
-    staff,
-    site,
-    reportDate,
-    workTypeLabel: workTypeLabels[workType],
-    workTime: workTime || "0",
-    allImages: allImages // 圧縮済みの全画像が入った配列を渡す
-  })
-});
+    if (!response.ok) throw new Error("サーバーへの送信に失敗しました");
 
-if (!response.ok) throw new Error("サーバーへの送信に失敗しました");
+    btn.innerText = "送信完了！";
+    btn.style.background = "#28a745";
 
-// サーバーがデータを受け取った時点で「送信完了」とする
+    setTimeout(() => {
+      resetFormExceptStaff();
+      btn.disabled = true;
+      btn.innerText = "送信";
+      btn.style.background = "";
+      if (document.getElementById("screen-lock")) document.getElementById("screen-lock").remove();
+    }, 2000);
+
+  } catch (e) {
+    console.error(e);
+    alert("エラーが発生しました。");
+    btn.disabled = false;
+    btn.innerText = "送信";
+    if (document.getElementById("screen-lock")) document.getElementById("screen-lock").remove();
+  }
+}
+
+/**
+ * 担当者名(staff)以外をリセットする
+ */
+/**
+ * 送信後に担当者(staff)以外をリセットする
+ */
+function resetFormExceptStaff() {
+  // 物件名をリセット
+  const siteEl = document.getElementById("site");
+  if (siteEl) siteEl.value = "";
+
+  // 日付を今日にリセット (YYYY-MM-DD形式で確実に)
+  const dateInput = document.getElementById("reportDate");
+  if (dateInput) {
+    const today = new Date();
+    const yyyy = today.getFullYear();
+    const mm = String(today.getMonth() + 1).padStart(2, '0');
+    const dd = String(today.getDate()).padStart(2, '0');
+    dateInput.value = `${yyyy}-${mm}-${dd}`;
+  }
+
+  // 全ファイル入力を空にする
+  document.querySelectorAll('input[type="file"]').forEach(input => {
+    input.value = "";
+  });
+
+  // 作業時間をリセット
+  const workTimeEl = document.getElementById("workTime");
+  if (workTimeEl) workTimeEl.value = "";
+
+  // 清掃区分をデフォルトに戻す
+  const normalRadio = document.querySelector('input[name="workType"][value="normal"]');
+  if (normalRadio) {
+    normalRadio.checked = true;
+    toggleInputsByWorkType(); 
+  }
+
+  // 送信ボタンの状態を更新
+  updateButtonState();
+}
+
+// 送信処理の最後 (location.reload() を置き換え)
+// ... (fetch処理の後) ...
 btn.innerText = "送信完了！";
 btn.style.background = "#28a745";
-
-// 2秒後にリセット処理を実行
 setTimeout(() => {
-  resetFormExceptStaff(); // 担当者以外をリセットする関数を呼ぶ
-  
-  // ボタンの状態を元に戻す
-  btn.disabled = true; // バリデーションにより最初は無効
+  resetFormExceptStaff();
+  btn.disabled = true;
   btn.innerText = "送信";
-  btn.style.background = ""; // 元の色に戻す
+  btn.style.background = "";
   if (document.getElementById("screen-lock")) document.getElementById("screen-lock").remove();
 }, 2000);
 
@@ -234,7 +263,7 @@ function compressToBase64(file, maxWidth, quality) {
 }
 
 /**
- * 6. バリデーション（ボタン活性化条件）
+ * 6. バリデーション
  */
 function updateButtonState() {
   const staff = document.getElementById("staff")?.value.trim();
@@ -251,9 +280,7 @@ function updateButtonState() {
   const hasFilter = (document.getElementById('photos_filter')?.files?.length || 0) > 0;
 
   let isValid = false;
-
   if (staff && site && reportDate) {
-    // 全てのモードで「通常清掃」のいずれかの写真があることを必須とする
     if (workType === 'normal') {
       isValid = hasNormal;
     } else if (workType === 'regular') {
@@ -277,7 +304,6 @@ function updateButtonState() {
  * 7. イベント設定
  */
 document.addEventListener('change', (e) => {
-  // ファイル枚数制限
   if (e.target.type === 'file') {
     const limit = FILE_LIMITS[e.target.id];
     if (limit && e.target.files.length > limit) {
@@ -288,47 +314,6 @@ document.addEventListener('change', (e) => {
   updateButtonState();
 });
 
-/**
- * 担当者名(staff)以外をリセットする
- */
-function resetFormExceptStaff() {
-  // 1. 物件名をリセット
-  const siteEl = document.getElementById("site");
-  if (siteEl) siteEl.value = "";
-
-  // 2. 日付を今日に戻す
-  const dateInput = document.getElementById("reportDate");
-  if (dateInput) dateInput.valueAsDate = new Date();
-
-  // 3. 全てのファイル入力を空にする
-  document.querySelectorAll('input[type="file"]').forEach(input => {
-    input.value = "";
-  });
-
-  // 4. フィルター清掃時間をリセット
-  const workTimeEl = document.getElementById("workTime");
-  if (workTimeEl) workTimeEl.value = "";
-
-  // 5. 備考をリセット
-  const memoEl = document.getElementById("memo");
-  const charCountEl = document.getElementById("charCount");
-  if (memoEl) {
-    memoEl.value = "";
-    if (charCountEl) charCountEl.innerText = "0 / 200";
-  }
-
-  // 6. 清掃区分を「通常清掃のみ」に戻す
-  const normalRadio = document.querySelector('input[name="workType"][value="normal"]');
-  if (normalRadio) {
-    normalRadio.checked = true;
-    toggleInputsByWorkType(); // 表示の切り替えを連動させる
-  }
-
-  // 7. 送信ボタンの状態を更新
-  updateButtonState();
-}
-
-// 入力フィールドの監視
 ['staff', 'site', 'reportDate', 'workTime'].forEach(id => {
   const el = document.getElementById(id);
   if (el) el.addEventListener('input', updateButtonState);
