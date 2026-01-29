@@ -95,7 +95,7 @@ async function send() {
                      `👤 担当者：${staff}\n` +
                      `🏠 現場名：${site}\n` +
                      `📋 区分：${workTypeLabels[workType]}` +
-                     (workType === 'filter' || workType === 'full' ? `\n⏱️ 時間：${workTime}分` : "");
+                     (workType === 'filter' || workType === 'full' ? `\n⏱️ フィルター清掃時間：${workTime}分` : "");
 
   if (!confirm(confirmMsg)) {
     return;
