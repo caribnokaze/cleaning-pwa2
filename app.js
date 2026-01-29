@@ -11,23 +11,13 @@ window.addEventListener('DOMContentLoaded', () => {
   toggleInputsByWorkType();
   updateButtonState();
 
+  // ラジオボタンの監視
   document.querySelectorAll('input[name="workType"]').forEach(radio => {
     radio.addEventListener('change', () => {
       toggleInputsByWorkType();
       updateButtonState();
     });
   });
-
-  const memoEl = document.getElementById("memo");
-  const charCountEl = document.getElementById("charCount");
-  if (memoEl && charCountEl) {
-    memoEl.addEventListener('input', () => {
-      const len = memoEl.value.length;
-      charCountEl.innerText = `${len} / 200`;
-      charCountEl.style.color = len > 200 ? "red" : "#666";
-      updateButtonState();
-    });
-  }
 });
 
 /**
@@ -83,7 +73,8 @@ function toggleInputsByWorkType() {
  */
 async function send() {
   const btn = document.getElementById("submitBtn");
-  
+  if (btn.disabled) return;
+
   const lockLayer = document.createElement("div");
   lockLayer.id = "screen-lock";
   Object.assign(lockLayer.style, {
@@ -131,16 +122,14 @@ async function send() {
     for (const inputInfo of fileInputs) {
       const inputEl = document.getElementById(inputInfo.id);
       if (!inputEl || inputEl.disabled || !inputEl.files.length) continue;
-
       const files = Array.from(inputEl.files);
-      for (let i = 0; i < files.length; i++) {
-        const compressed = await compressToBase64(files[i], 800, 0.3);
-        const isExtra = inputInfo.category !== 'normal';
+      for (const file of files) {
+        const compressed = await compressToBase64(file, 800, 0.3);
         allImages.push({
           id: inputInfo.id,
           label: inputInfo.label,
           data: compressed,
-          isExtra: isExtra
+          isExtra: inputInfo.category !== 'normal'
         });
       }
     }
@@ -151,9 +140,7 @@ async function send() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        staff,
-        site,
-        reportDate,
+        staff, site, reportDate,
         workTypeLabel: workTypeLabels[workType],
         workTime: workTime || "0",
         allImages: allImages
@@ -167,9 +154,6 @@ async function send() {
 
     setTimeout(() => {
       resetFormExceptStaff();
-      btn.disabled = true;
-      btn.innerText = "送信";
-      btn.style.background = "";
       if (document.getElementById("screen-lock")) document.getElementById("screen-lock").remove();
     }, 2000);
 
@@ -183,57 +167,38 @@ async function send() {
 }
 
 /**
- * 担当者名(staff)以外をリセットする
- */
-/**
  * 送信後に担当者(staff)以外をリセットする
  */
 function resetFormExceptStaff() {
-  // 物件名をリセット
   const siteEl = document.getElementById("site");
   if (siteEl) siteEl.value = "";
 
-  // 日付を今日にリセット (YYYY-MM-DD形式で確実に)
   const dateInput = document.getElementById("reportDate");
   if (dateInput) {
-    const today = new Date();
-    const yyyy = today.getFullYear();
-    const mm = String(today.getMonth() + 1).padStart(2, '0');
-    const dd = String(today.getDate()).padStart(2, '0');
-    dateInput.value = `${yyyy}-${mm}-${dd}`;
+    dateInput.value = new Date().toISOString().split('T')[0];
   }
 
-  // 全ファイル入力を空にする
   document.querySelectorAll('input[type="file"]').forEach(input => {
     input.value = "";
   });
 
-  // 作業時間をリセット
   const workTimeEl = document.getElementById("workTime");
   if (workTimeEl) workTimeEl.value = "";
 
-  // 清掃区分をデフォルトに戻す
   const normalRadio = document.querySelector('input[name="workType"][value="normal"]');
   if (normalRadio) {
     normalRadio.checked = true;
     toggleInputsByWorkType(); 
   }
 
-  // 送信ボタンの状態を更新
+  const btn = document.getElementById("submitBtn");
+  if (btn) {
+    btn.disabled = true;
+    btn.innerText = "送信";
+    btn.style.background = "";
+  }
   updateButtonState();
 }
-
-// 送信処理の最後 (location.reload() を置き換え)
-// ... (fetch処理の後) ...
-btn.innerText = "送信完了！";
-btn.style.background = "#28a745";
-setTimeout(() => {
-  resetFormExceptStaff();
-  btn.disabled = true;
-  btn.innerText = "送信";
-  btn.style.background = "";
-  if (document.getElementById("screen-lock")) document.getElementById("screen-lock").remove();
-}, 2000);
 
 /**
  * 5. 画像圧縮
@@ -263,7 +228,7 @@ function compressToBase64(file, maxWidth, quality) {
 }
 
 /**
- * 6. バリデーション
+ * 6. バリデーション（ボタンの状態更新）
  */
 function updateButtonState() {
   const staff = document.getElementById("staff")?.value.trim();
@@ -286,9 +251,9 @@ function updateButtonState() {
     } else if (workType === 'regular') {
       isValid = hasNormal && hasRegular;
     } else if (workType === 'filter') {
-      isValid = hasNormal && hasFilter && workTime;
+      isValid = hasNormal && hasFilter && (workTime && workTime !== "0");
     } else if (workType === 'full') {
-      isValid = hasNormal && hasRegular && hasFilter && workTime;
+      isValid = hasNormal && hasRegular && hasFilter && (workTime && workTime !== "0");
     }
   }
 
@@ -301,9 +266,10 @@ function updateButtonState() {
 }
 
 /**
- * 7. イベント設定
+ * 7. イベント登録（一括）
  */
 document.addEventListener('change', (e) => {
+  // ファイル枚数制限
   if (e.target.type === 'file') {
     const limit = FILE_LIMITS[e.target.id];
     if (limit && e.target.files.length > limit) {
@@ -311,10 +277,15 @@ document.addEventListener('change', (e) => {
       e.target.value = "";
     }
   }
+  // 何かが変わったらボタン判定
   updateButtonState();
 });
 
+// 入力項目へのイベント登録を確実にする
 ['staff', 'site', 'reportDate', 'workTime'].forEach(id => {
   const el = document.getElementById(id);
-  if (el) el.addEventListener('input', updateButtonState);
+  if (el) {
+    el.addEventListener('input', updateButtonState);
+    el.addEventListener('change', updateButtonState); // セレクトボックス対策
+  }
 });
