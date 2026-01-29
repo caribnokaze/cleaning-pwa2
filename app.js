@@ -237,26 +237,50 @@ function updateButtonState() {
   const workType = document.querySelector('input[name="workType"]:checked')?.value;
   const workTime = document.getElementById("workTime")?.value;
 
-  const normalIds = ['photos_amenity', 'photos_kitchen', 'photos_toilet', 'photos_bath', 'photos_living', 'photos_bedroom', 'photos_hallway'];
-  const regularIds = ['regular_1', 'regular_2', 'regular_3', 'regular_4', 'regular_5', 'regular_6', 'regular_7', 'regular_8'];
+  // --- 必須項目の定義（(任意) 以外のIDをリストアップ） ---
+  
+  // 通常清掃の必須（othersは除外）
+  const requiredNormalIds = [
+    'photos_amenity', 'photos_kitchen', 'photos_toilet', 
+    'photos_bath', 'photos_living', 'photos_bedroom', 'photos_hallway'
+  ];
+  
+  // 定期清掃の必須（regular_8は除外）
+  const requiredRegularIds = [
+    'regular_1', 'regular_2', 'regular_3', 'regular_4', 
+    'regular_5', 'regular_6', 'regular_7'
+  ];
 
-  const hasNormal = normalIds.some(id => (document.getElementById(id)?.files?.length || 0) > 0);
-  const hasRegular = regularIds.some(id => (document.getElementById(id)?.files?.length || 0) > 0);
-  const hasFilter = (document.getElementById('photos_filter')?.files?.length || 0) > 0;
+  // --- 各項目の入力状況チェック ---
+  
+  // 「すべて(every)」ファイルが1枚以上選択されているか
+  const isNormalComplete = requiredNormalIds.every(id => (document.getElementById(id)?.files?.length || 0) > 0);
+  const isRegularComplete = requiredRegularIds.every(id => (document.getElementById(id)?.files?.length || 0) > 0);
+  const isFilterComplete = (document.getElementById('photos_filter')?.files?.length || 0) > 0;
+  
+  // 作業時間の選択（空でなく、"0"でもないこと）
+  const isTimeSelected = (workTime && workTime !== "" && workTime !== "0");
 
   let isValid = false;
+
+  // 基本情報（日付・スタッフ・現場）が入力されていることが大前提
   if (staff && site && reportDate) {
     if (workType === 'normal') {
-      isValid = hasNormal;
+      // 通常清掃のみ：通常写真がすべて揃っていればOK
+      isValid = isNormalComplete;
     } else if (workType === 'regular') {
-      isValid = hasNormal && hasRegular;
+      // 定期清掃のみ：通常写真＋定期写真がすべて揃っていればOK
+      isValid = isNormalComplete && isRegularComplete;
     } else if (workType === 'filter') {
-      isValid = hasNormal && hasFilter && (workTime && workTime !== "0");
+      // フィルターのみ：通常写真＋フィルター写真＋時間が揃っていればOK
+      isValid = isNormalComplete && isFilterComplete && isTimeSelected;
     } else if (workType === 'full') {
-      isValid = hasNormal && hasRegular && hasFilter && (workTime && workTime !== "0");
+      // 全部盛り：すべて揃っていればOK
+      isValid = isNormalComplete && isRegularComplete && isFilterComplete && isTimeSelected;
     }
   }
 
+  // --- ボタンへの反映 ---
   const btn = document.getElementById("submitBtn");
   if (btn) {
     btn.disabled = !isValid;
@@ -264,7 +288,6 @@ function updateButtonState() {
     btn.style.cursor = isValid ? "pointer" : "not-allowed";
   }
 }
-
 /**
  * 7. イベント登録（一括）
  */
