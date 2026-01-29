@@ -8,7 +8,7 @@ app.use(cors());
 app.use(bodyParser.json({ limit: '50mb' }));
 app.use(express.static('.'));
 
-const GAS_URL = "https://script.google.com/macros/s/AKfycbwGoIhoJ74-yqGDgmvxqE4JyD5mviVsywTvwszsZq-LBee9XeOk0e_iCJF8-Jt-ZgBMQA/exec";
+const GAS_URL = "https://script.google.com/macros/s/AKfycbwKjS6j1k7PrxNAsvF83xaNTO7gXJKq558juXB5TNo1iAePdapzA85aNmwsFclDOhYghQ/exec";
 
 // 画像送信を受け付ける窓口
 app.post('/upload', (req, res) => {
