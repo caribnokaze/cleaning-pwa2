@@ -75,26 +75,42 @@ async function send() {
   const btn = document.getElementById("submitBtn");
   if (btn.disabled) return;
 
+  // --- 1. 入力値の取得 ---
+  const staff = document.getElementById("staff").value;
+  const site = document.getElementById("site").value;
+  const reportDate = document.getElementById("reportDate").value;
+  const workType = document.querySelector('input[name="workType"]:checked')?.value || "";
+  const workTime = document.getElementById("workTime").value;
+
+  const workTypeLabels = {
+    normal: "通常清掃のみ",
+    full: "定期清掃＋フィルター清掃",
+    regular: "定期清掃のみ",
+    filter: "フィルター清掃のみ"
+  };
+
+  // --- 2. 確認ダイアログの表示 ---
+  const confirmMsg = `以下の内容で送信します。よろしいですか？\n\n` +
+                     `📅 清掃日：${reportDate}\n` +
+                     `👤 担当者：${staff}\n` +
+                     `🏠 現場名：${site}\n` +
+                     `📋 区分：${workTypeLabels[workType]}` +
+                     (workType.includes('filter') ? `\n⏱️ 時間：${workTime}分` : "");
+
+  if (!confirm(confirmMsg)) {
+    return;
+  }
+
+  // --- 3. 画面ロックの開始 ---
   const lockLayer = document.createElement("div");
   lockLayer.id = "screen-lock";
   Object.assign(lockLayer.style, {
     position: "fixed", top: "0", left: "0", width: "100%", height: "100%",
-    background: "rgba(0,0,0,0.2)", zIndex: "9999", cursor: "wait"
+    background: "rgba(0,0,0,0.4)", zIndex: "9999", cursor: "wait"
   });
   document.body.appendChild(lockLayer);
 
   try {
-    const staff = document.getElementById("staff").value;
-    const site = document.getElementById("site").value;
-    const reportDate = document.getElementById("reportDate").value;
-    const workType = document.querySelector('input[name="workType"]:checked')?.value || "";
-    const workTime = document.getElementById("workTime").value;
-
-    const workTypeLabels = {
-      normal: "通常清掃のみ", full: "定期清掃＋フィルター清掃",
-      regular: "定期清掃のみ", filter: "フィルター清掃のみ"
-    };
-
     const fileInputs = [
       { id: 'photos_amenity', label: 'タオル歯ブラシ', category: 'normal' },
       { id: 'photos_kitchen', label: 'キッチン', category: 'normal' },
@@ -136,6 +152,7 @@ async function send() {
 
     btn.innerText = `データを送信中...`;
 
+    // server.js への送信
     const response = await fetch("/upload", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -149,12 +166,15 @@ async function send() {
 
     if (!response.ok) throw new Error("サーバーへの送信に失敗しました");
 
-    btn.innerText = "送信完了！";
+    // 送信成功時の表示
+    btn.innerText = "送信完了！(バックグラウンド処理中)";
     btn.style.background = "#28a745";
 
     setTimeout(() => {
       resetFormExceptStaff();
-      if (document.getElementById("screen-lock")) document.getElementById("screen-lock").remove();
+      if (document.getElementById("screen-lock")) {
+        document.getElementById("screen-lock").remove();
+      }
     }, 2000);
 
   } catch (e) {
@@ -162,7 +182,9 @@ async function send() {
     alert("エラーが発生しました。");
     btn.disabled = false;
     btn.innerText = "送信";
-    if (document.getElementById("screen-lock")) document.getElementById("screen-lock").remove();
+    if (document.getElementById("screen-lock")) {
+      document.getElementById("screen-lock").remove();
+    }
   }
 }
 
