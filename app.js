@@ -192,22 +192,19 @@ const response = await fetch("/upload", {
 if (!response.ok) throw new Error("サーバーへの送信に失敗しました");
 
 // サーバーがデータを受け取った時点で「送信完了」とする
-btn.innerText = "送信完了！(裏側で保存中)";
+btn.innerText = "送信完了！";
 btn.style.background = "#28a745";
-setTimeout(() => location.reload(), 2000);
 
-    btn.innerText = "送信完了！";
-    btn.style.background = "#28a745";
-    setTimeout(() => location.reload(), 2000);
-
-  } catch (e) {
-    console.error(e);
-    alert("エラーが発生しました。");
-    btn.disabled = false;
-    btn.innerText = "送信";
-    if (document.getElementById("screen-lock")) document.getElementById("screen-lock").remove();
-  }
-}
+// 2秒後にリセット処理を実行
+setTimeout(() => {
+  resetFormExceptStaff(); // 担当者以外をリセットする関数を呼ぶ
+  
+  // ボタンの状態を元に戻す
+  btn.disabled = true; // バリデーションにより最初は無効
+  btn.innerText = "送信";
+  btn.style.background = ""; // 元の色に戻す
+  if (document.getElementById("screen-lock")) document.getElementById("screen-lock").remove();
+}, 2000);
 
 /**
  * 5. 画像圧縮
@@ -290,6 +287,46 @@ document.addEventListener('change', (e) => {
   }
   updateButtonState();
 });
+
+/**
+ * 担当者名(staff)以外をリセットする
+ */
+function resetFormExceptStaff() {
+  // 1. 物件名をリセット
+  const siteEl = document.getElementById("site");
+  if (siteEl) siteEl.value = "";
+
+  // 2. 日付を今日に戻す
+  const dateInput = document.getElementById("reportDate");
+  if (dateInput) dateInput.valueAsDate = new Date();
+
+  // 3. 全てのファイル入力を空にする
+  document.querySelectorAll('input[type="file"]').forEach(input => {
+    input.value = "";
+  });
+
+  // 4. フィルター清掃時間をリセット
+  const workTimeEl = document.getElementById("workTime");
+  if (workTimeEl) workTimeEl.value = "";
+
+  // 5. 備考をリセット
+  const memoEl = document.getElementById("memo");
+  const charCountEl = document.getElementById("charCount");
+  if (memoEl) {
+    memoEl.value = "";
+    if (charCountEl) charCountEl.innerText = "0 / 200";
+  }
+
+  // 6. 清掃区分を「通常清掃のみ」に戻す
+  const normalRadio = document.querySelector('input[name="workType"][value="normal"]');
+  if (normalRadio) {
+    normalRadio.checked = true;
+    toggleInputsByWorkType(); // 表示の切り替えを連動させる
+  }
+
+  // 7. 送信ボタンの状態を更新
+  updateButtonState();
+}
 
 // 入力フィールドの監視
 ['staff', 'site', 'reportDate', 'workTime'].forEach(id => {
