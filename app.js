@@ -24,9 +24,9 @@ window.addEventListener('DOMContentLoaded', () => {
  * 2. 枚数制限設定
  */
 const FILE_LIMITS = {
-  'photos_amenity': 5, 'photos_kitchen': 15, 'photos_toilet': 10,
+  'photos_amenity': 5, 'photos_kitchen': 15,
   'photos_bath': 15, 'photos_living': 15, 'photos_bedroom': 15,
-  'photos_hallway': 15, 'photos_others': 10,
+  'photos_hallway': 15, 'photos_equipment': 10, 'photos_others': 10,
   'regular_1': 10, 'regular_2': 10, 'regular_3': 10, 'regular_4': 10,
   'regular_5': 10, 'regular_6': 10, 'regular_7': 10, 'regular_8': 10,
   'photos_filter': 10
@@ -112,13 +112,13 @@ async function send() {
 
   try {
     const fileInputs = [
-      { id: 'photos_amenity', label: 'タオル歯ブラシ', category: 'normal' },
+      { id: 'photos_amenity', label: 'タオル歯/ブラシ', category: 'normal' },
       { id: 'photos_kitchen', label: 'キッチン', category: 'normal' },
-      { id: 'photos_toilet', label: 'トイレ', category: 'normal' },
-      { id: 'photos_bath', label: 'お風呂洗面', category: 'normal' },
+      { id: 'photos_bath', label: 'お風呂/洗面/トイレ', category: 'normal' },
       { id: 'photos_living', label: 'リビング', category: 'normal' },
       { id: 'photos_bedroom', label: '寝室', category: 'normal' },
       { id: 'photos_hallway', label: '廊下', category: 'normal' },
+      { id: 'photos_equipment', label: 'エアコン/電気/WiFi/鍵', category: 'normal' },
       { id: 'photos_others', label: '物件指定破損', category: 'normal' },
       { id: 'regular_1', label: '定期_リビング', category: 'regular' },
       { id: 'regular_2', label: '定期_寝室', category: 'regular' },
@@ -140,7 +140,7 @@ async function send() {
       if (!inputEl || inputEl.disabled || !inputEl.files.length) continue;
       const files = Array.from(inputEl.files);
       for (const file of files) {
-        const compressed = await compressToBase64(file, 800, 0.3);
+        const compressed = await compressToBase64(file, 1000, 0.5);
         allImages.push({
           id: inputInfo.id,
           label: inputInfo.label,
