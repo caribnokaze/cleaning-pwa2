@@ -112,7 +112,7 @@ async function send() {
 
   try {
     const fileInputs = [
-      { id: 'photos_amenity', label: 'タオル歯/ブラシ', category: 'normal' },
+      { id: 'photos_amenity', label: 'タオル/歯ブラシ', category: 'normal' },
       { id: 'photos_kitchen', label: 'キッチン', category: 'normal' },
       { id: 'photos_bath', label: 'お風呂/洗面/トイレ', category: 'normal' },
       { id: 'photos_living', label: 'リビング', category: 'normal' },
