@@ -263,8 +263,7 @@ function updateButtonState() {
   
   // 通常清掃の必須（othersは除外）
   const requiredNormalIds = [
-    'photos_amenity', 'photos_kitchen', 'photos_toilet', 
-    'photos_bath', 'photos_living', 'photos_bedroom', 'photos_hallway'
+    'photos_amenity', 'photos_kitchen', 'photos_bath', 'photos_living', 'photos_bedroom', 'photos_equipment', 'photos_hallway'
   ];
   
   // 定期清掃の必須（regular_8は除外）
