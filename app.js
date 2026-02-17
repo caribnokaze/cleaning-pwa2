@@ -187,7 +187,7 @@ async function send() {
       if (!response.ok) throw new Error("送信中にエラーが発生しました");
 
       // CPU冷却とメモリ解放のための極小スリープ
-      await new Promise(r => setTimeout(r, 50));
+      await new Promise(r => setTimeout(r, 500));
     }
 
     // --- 5. 完了処理 ---
