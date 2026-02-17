@@ -68,8 +68,10 @@ function toggleInputsByWorkType() {
   updateUI(filterAreas, filterInputs, isFilterActive);
 }
 
+
+
 /**
- * 4. メイン送信関数
+ * 4. メイン送信関数 (Android SH-51C 救済モデル)
  */
 async function send() {
   const btn = document.getElementById("submitBtn");
@@ -89,86 +91,98 @@ async function send() {
     filter: "フィルター清掃のみ"
   };
 
-  // --- 2. 確認ダイアログの表示 ---
-  const confirmMsg = `以下の内容で送信します。よろしいですか？\n\n` +
-                     `📅 清掃日：${reportDate}\n` +
-                     `👤 担当者：${staff}\n` +
-                     `🏠 現場名：${site}\n` +
-                     `📋 区分：${workTypeLabels[workType]}` +
-                     (workType === 'filter' || workType === 'full' ? `\n⏱️ フィルター清掃時間：${workTime}分` : "");
+  // --- 2. 確認ダイアログ ---
+  if (!confirm("送信を開始します。よろしいですか？\n(送信中は画面を閉じないでください)")) return;
 
-  if (!confirm(confirmMsg)) {
-    return;
-  }
-
-  // --- 3. 画面ロックの開始 ---
+  // --- 3. 進捗表示レイヤーの作成 ---
   const lockLayer = document.createElement("div");
   lockLayer.id = "screen-lock";
   Object.assign(lockLayer.style, {
     position: "fixed", top: "0", left: "0", width: "100%", height: "100%",
-    background: "rgba(0,0,0,0.4)", zIndex: "9999", cursor: "wait"
+    background: "rgba(0,0,0,0.7)", zIndex: "9999", color: "white",
+    display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", textAlign: "center"
   });
+  lockLayer.innerHTML = `
+    <div style="width: 80%;">
+      <div id="progress-text" style="font-size: 18px; margin-bottom: 15px;">準備中...</div>
+      <div style="width:100%; height:15px; background:#444; border-radius:10px; overflow:hidden;">
+        <div id="progress-bar" style="width:0%; height:100%; background:#28a745; transition:0.3s;"></div>
+      </div>
+      <p style="font-size: 12px; margin-top: 20px;">サーバーへ転送中です。<br>数字が最後まで進めば移動してOKです！</p>
+    </div>
+  `;
   document.body.appendChild(lockLayer);
+
+  const progText = document.getElementById("progress-text");
+  const progBar = document.getElementById("progress-bar");
 
   try {
     const fileInputs = [
-      { id: 'photos_amenity', label: 'タオル/歯ブラシ', category: 'normal' },
-      { id: 'photos_kitchen', label: 'キッチン', category: 'normal' },
-      { id: 'photos_bath', label: 'お風呂/洗面/トイレ', category: 'normal' },
-      { id: 'photos_living', label: 'リビング', category: 'normal' },
-      { id: 'photos_bedroom', label: '寝室', category: 'normal' },
-      { id: 'photos_hallway', label: '廊下', category: 'normal' },
-      { id: 'photos_equipment', label: 'エアコン/電気/WiFi/鍵', category: 'normal' },
-      { id: 'photos_others', label: '物件指定破損', category: 'normal' },
-      { id: 'regular_1', label: '定期_リビング', category: 'regular' },
-      { id: 'regular_2', label: '定期_寝室', category: 'regular' },
-      { id: 'regular_3', label: '定期_キッチン', category: 'regular' },
-      { id: 'regular_4', label: '定期_水回り', category: 'regular' },
-      { id: 'regular_5', label: '定期_窓建具', category: 'regular' },
-      { id: 'regular_6', label: '定期_屋外', category: 'regular' },
-      { id: 'regular_7', label: '定期_場所横断', category: 'regular' },
-      { id: 'regular_8', label: '定期_その他', category: 'regular' },
-      { id: 'photos_filter', label: 'フィルター', category: 'filter' }
+      { id: 'photos_amenity', label: 'タオル/歯ブラシ' },
+      { id: 'photos_kitchen', label: 'キッチン' },
+      { id: 'photos_bath', label: 'お風呂/洗面/トイレ' },
+      { id: 'photos_living', label: 'リビング' },
+      { id: 'photos_bedroom', label: '寝室' },
+      { id: 'photos_hallway', label: '廊下' },
+      { id: 'photos_equipment', label: 'エアコン/電気/WiFi/鍵' },
+      { id: 'photos_others', label: '物件指定破損' },
+      { id: 'regular_1', label: '定期_リビング' },
+      { id: 'regular_2', label: '定期_寝室' },
+      { id: 'regular_3', label: '定期_キッチン' },
+      { id: 'regular_4', label: '定期_水回り' },
+      { id: 'regular_5', label: '定期_窓建具' },
+      { id: 'regular_6', label: '定期_屋外' },
+      { id: 'regular_7', label: '定期_場所横断' },
+      { id: 'regular_8', label: '定期_その他' },
+      { id: 'photos_filter', label: 'フィルター' }
     ];
 
-    btn.disabled = true;
-    btn.innerText = "画像を圧縮中...";
-
-    const allImages = [];
-    for (const inputInfo of fileInputs) {
-      const inputEl = document.getElementById(inputInfo.id);
-      if (!inputEl || inputEl.disabled || !inputEl.files.length) continue;
-      const files = Array.from(inputEl.files);
-      for (const file of files) {
-        const compressed = await compressToBase64(file, 1000, 0.5);
-        allImages.push({
-          id: inputInfo.id,
-          label: inputInfo.label,
-          data: compressed,
-          isExtra: inputInfo.category !== 'normal'
-        });
+    // 全ファイルリストの作成
+    let tasks = [];
+    fileInputs.forEach(input => {
+      const el = document.getElementById(input.id);
+      if (el && !el.disabled && el.files.length) {
+        Array.from(el.files).forEach(f => tasks.push({ file: f, label: input.label, id: input.id }));
       }
-    }
-
-    btn.innerText = `データを送信中...`;
-
-    // server.js への送信
-    const response = await fetch("/upload", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        staff, site, reportDate,
-        workTypeLabel: workTypeLabels[workType],
-        workTime: workTime || "0",
-        allImages: allImages
-      })
     });
 
-    if (!response.ok) throw new Error("サーバーへの送信に失敗しました");
+    const total = tasks.length;
+    btn.disabled = true;
 
-    // 送信成功時の表示
-    btn.innerText = "送信完了！";
-    btn.style.background = "#28a745";
+    // --- 4. 1枚ずつ 圧縮 → 送信 を繰り返す ---
+    for (let i = 0; i < total; i++) {
+      const current = i + 1;
+      progText.innerText = `送信中: ${current} / ${total} 枚目\n(${tasks[i].label})`;
+      progBar.style.width = `${(current / total) * 100}%`;
+
+      // 軽量サイズで圧縮 (SH-51Cの負荷を軽減)
+      const compressed = await compressToBase64(tasks[i].file, 640, 0.3);
+
+      // サーバーへ送信 (server.jsが Accepted 202 を即レスするので速い)
+      const response = await fetch("/upload", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          staff, site, reportDate,
+          workTypeLabel: workTypeLabels[workType],
+          workTime: workTime || "0",
+          allImages: [{ // 1枚入りの配列として送る（server.jsの構造を維持）
+            id: tasks[i].id,
+            label: tasks[i].label,
+            data: compressed
+          }]
+        })
+      });
+
+      if (!response.ok) throw new Error("送信中にエラーが発生しました");
+
+      // CPU冷却とメモリ解放のための極小スリープ
+      await new Promise(r => setTimeout(r, 50));
+    }
+
+    // --- 5. 完了処理 ---
+    progText.innerText = "送信完了！";
+    progBar.style.background = "#28a745";
 
     setTimeout(() => {
       resetFormExceptStaff();
@@ -179,9 +193,8 @@ async function send() {
 
   } catch (e) {
     console.error(e);
-    alert("エラーが発生しました。");
+    alert("エラーが発生しました。電波の良い場所でやり直してください。");
     btn.disabled = false;
-    btn.innerText = "送信";
     if (document.getElementById("screen-lock")) {
       document.getElementById("screen-lock").remove();
     }
