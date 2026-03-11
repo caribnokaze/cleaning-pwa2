@@ -8,7 +8,7 @@ app.use(cors());
 app.use(bodyParser.json({ limit: '50mb' })); // 画像データを受け取るため大きめに設定
 app.use(express.static('.'));
 
-const GAS_URL = "https://script.google.com/macros/s/AKfycby20bs8R0K4fiHVKVJbpmtLjlCuA7I97xjoGqEgP9ism3exFRpLSBVszqP9orRMKX5SrQ/exec";
+const GAS_URL = "https://script.google.com/macros/s/AKfycbxeqqv2b97EYfIGFzUIOxSBjcBZs48J1XNJQvNjRpQDwNA4LQM18VosPvc5NrCiiPzgmA/exec";
 
 // --- 行列（キュー）管理用の変数 ---
 let uploadQueue = [];
