@@ -10,45 +10,52 @@ app.use(express.static('.'));
 
 const GAS_URL = "https://script.google.com/macros/s/AKfycby20bs8R0K4fiHVKVJbpmtLjlCuA7I97xjoGqEgP9ism3exFRpLSBVszqP9orRMKX5SrQ/exec";
 
-// 画像送信を受け付ける窓口
-app.post('/upload', (req, res) => {
-    // ブラウザにはすぐに「受付完了」を返す
-    res.status(202).json({ message: "Background processing started" });
+// --- 行列（キュー）管理用の変数 ---
+let isProcessing = false;
+let uploadQueue = [];
 
-    // ここから裏側（バックグラウンド）でGASへ送信
-    const data = req.body;
+app.post('/upload', (req, res) => {
+    // 1. データをキューに追加
+    uploadQueue.push(req.body);
     
-    // 非同期で実行（awaitしないことでブラウザを待たせない）
-    sendToGas(data);
+    // 2. ブラウザにはすぐにレスポンスを返す
+    res.status(202).json({ message: "Added to queue" });
+
+    // 3. 行列の処理を開始（すでに動いていれば何もしない）
+    processQueue();
 });
 
-// --- Server.js の sendToGas 関数 ---
+async function processQueue() {
+    if (isProcessing) return; // すでに誰かの分を送信中なら、終わるまで待機
+    isProcessing = true;
 
-async function sendToGas(data) {
-    try {
-        const { allImages, ...info } = data;
-        console.log(`Starting background upload of ${allImages.length} images...`);
+    while (uploadQueue.length > 0) {
+        const data = uploadQueue.shift(); // 行列の先頭を取り出す
+        try {
+            const { allImages, ...info } = data;
+            console.log(`Processing queue: ${allImages.length} images remaining...`);
 
-        for (let i = 0; i < allImages.length; i++) {
-            // axios.post の第3引数にオプションを追加
-            await axios.post(GAS_URL, {
-                ...info,
-                singleImage: allImages[i]
-            }, {
-                maxRedirects: 5, // GASのリダイレクトを許可
-                headers: { 'Content-Type': 'application/json' }
-            });
+            for (let i = 0; i < allImages.length; i++) {
+                // GASへ送信
+                await axios.post(GAS_URL, {
+                    ...info,
+                    singleImage: allImages[i]
+                }, {
+                    headers: { 'Content-Type': 'application/json' }
+                });
 
-            console.log(`GAS upload success: ${i + 1}/${allImages.length}`);
-            
-            // GAS側のロック競合を避けるため、待機時間を1秒(1000ms)に推奨
-            await new Promise(r => setTimeout(r, 1000));
+                console.log(`GAS upload success: ${i + 1}/${allImages.length}`);
+                
+                // 【重要】GAS側のパンクを防ぐため、1.5秒（少し長め）待機
+                await new Promise(r => setTimeout(r, 1500));
+            }
+        } catch (error) {
+            console.error("GAS Upload Error:", error.message);
         }
-        console.log("--- All background processes completed ---");
-    } catch (error) {
-        // エラー内容を詳しくログ出力
-        console.error("GAS Upload Error:", error.response ? error.response.status : error.message);
     }
+
+    isProcessing = false; // 全ての行列が空になったらフラグを下ろす
+    console.log("--- All queue processes completed ---");
 }
 
 const PORT = process.env.PORT || 8080;
