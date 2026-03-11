@@ -5,60 +5,71 @@ const cors = require('cors');
 const app = express();
 
 app.use(cors());
-app.use(bodyParser.json({ limit: '50mb' }));
+app.use(bodyParser.json({ limit: '50mb' })); // 画像データを受け取るため大きめに設定
 app.use(express.static('.'));
 
-const GAS_URL = "https://script.google.com/macros/s/AKfycbxeqqv2b97EYfIGFzUIOxSBjcBZs48J1XNJQvNjRpQDwNA4LQM18VosPvc5NrCiiPzgmA/exec";
+const GAS_URL = "https://script.google.com/macros/s/AKfycby20bs8R0K4fiHVKVJbpmtLjlCuA7I97xjoGqEgP9ism3exFRpLSBVszqP9orRMKX5SrQ/exec";
 
 // --- 行列（キュー）管理用の変数 ---
-let isProcessing = false;
 let uploadQueue = [];
+let activeWorkers = 0;
+const MAX_CONCURRENT_WORKERS = 5; // 同時にGASへ送信する清掃員の数（5人分まで並行処理）
 
 app.post('/upload', (req, res) => {
-    // 1. データをキューに追加
+    // 1. 届いたデータをキュー（行列）に追加
     uploadQueue.push(req.body);
     
-    // 2. ブラウザにはすぐにレスポンスを返す
-    res.status(202).json({ message: "Added to queue" });
+    // 2. ブラウザには即座に「受付完了」を返し、清掃員を待たせない
+    res.status(202).json({ message: "Queue accepted" });
 
-    // 3. 行列の処理を開始（すでに動いていれば何もしない）
+    // 3. 行列の消化を開始
     processQueue();
 });
 
 async function processQueue() {
-    if (isProcessing) return; // すでに誰かの分を送信中なら、終わるまで待機
-    isProcessing = true;
+    // 同時稼働数が上限に達していたら何もしない
+    if (activeWorkers >= MAX_CONCURRENT_WORKERS || uploadQueue.length === 0) {
+        return;
+    }
 
-    while (uploadQueue.length > 0) {
-        const data = uploadQueue.shift(); // 行列の先頭を取り出す
-        try {
-            const { allImages, ...info } = data;
-            console.log(`Processing queue: ${allImages.length} images remaining...`);
+    activeWorkers++; // 稼働数をカウントアップ
+    const data = uploadQueue.shift(); // 行列の先頭（1人分の全画像データ）を取り出す
 
-            for (let i = 0; i < allImages.length; i++) {
-                // GASへ送信
+    try {
+        const { allImages, ...info } = data;
+        const staffName = info.staff || "不明";
+        console.log(`[START] ${staffName}さんの送信を開始 (残りキュー: ${uploadQueue.length})`);
+
+        for (let i = 0; i < allImages.length; i++) {
+            try {
+                // GASへ1枚ずつ送信
                 await axios.post(GAS_URL, {
                     ...info,
                     singleImage: allImages[i]
                 }, {
-                    headers: { 'Content-Type': 'application/json' }
+                    headers: { 'Content-Type': 'application/json' },
+                    timeout: 60000 // 1枚あたり60秒でタイムアウト設定
                 });
 
-                console.log(`GAS upload success: ${i + 1}/${allImages.length}`);
-                
-                // 【重要】GAS側のパンクを防ぐため、1.5秒（少し長め）待機
-                await new Promise(r => setTimeout(r, 1000));
+                console.log(`[PROGRESS] ${staffName}: ${i + 1}/${allImages.length} 完了`);
+            } catch (err) {
+                console.error(`[ERROR] ${staffName}の画像${i+1}枚目で失敗:`, err.message);
             }
-        } catch (error) {
-            console.error("GAS Upload Error:", error.message);
-        }
-    }
 
-    isProcessing = false; // 全ての行列が空になったらフラグを下ろす
-    console.log("--- All queue processes completed ---");
+            // 【重要】同じ清掃員の次の画像を送る前に1.5秒待機（GASの負荷分散）
+            await new Promise(r => setTimeout(r, 1500));
+        }
+        console.log(`[FINISH] ${staffName}さんの全画像送信が完了しました`);
+
+    } catch (globalError) {
+        console.error("予期せぬエラー:", globalError.message);
+    } finally {
+        activeWorkers--; // 稼働数を戻す
+        processQueue(); // 次の行列があれば処理を再開
+    }
 }
 
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => {
-    console.log(`Server listening on port ${PORT}`);
+    console.log(`Server running on port ${PORT} (Parallel Workers: ${MAX_CONCURRENT_WORKERS})`);
 });
