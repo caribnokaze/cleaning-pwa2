@@ -26,7 +26,7 @@ window.addEventListener('DOMContentLoaded', () => {
 const FILE_LIMITS = {
   'photos_amenity': 5, 'photos_kitchen': 15,
   'photos_bath': 15, 'photos_living': 15, 'photos_bedroom': 15,
-  'photos_hallway': 15, 'photos_equipment': 10, 'photos_others': 10,
+  'photos_hallway': 10, 'photos_equipment': 20, 'photos_others': 10,
   'regular_1': 10, 'regular_2': 10, 'regular_3': 10, 'regular_4': 10,
   'regular_5': 10, 'regular_6': 10, 'regular_7': 10, 'regular_8': 10,
   'photos_filter': 10
@@ -286,7 +286,7 @@ function updateButtonState() {
   
   // 通常清掃の必須（othersは除外）
   const requiredNormalIds = [
-    'photos_amenity', 'photos_kitchen', 'photos_bath', 'photos_living', 'photos_bedroom', 'photos_equipment', 'photos_equipment'
+    'photos_amenity', 'photos_kitchen', 'photos_bath', 'photos_living', 'photos_bedroom', 'photos_equipment', 'photos_others'
   ];
   
   // 定期清掃の必須（regular_8は除外）
