@@ -47,7 +47,7 @@ async function processQueue() {
                 console.log(`GAS upload success: ${i + 1}/${allImages.length}`);
                 
                 // 【重要】GAS側のパンクを防ぐため、1.5秒（少し長め）待機
-                await new Promise(r => setTimeout(r, 1500));
+                await new Promise(r => setTimeout(r, 1000));
             }
         } catch (error) {
             console.error("GAS Upload Error:", error.message);
