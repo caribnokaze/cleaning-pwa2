@@ -166,7 +166,7 @@ async function send() {
       progBar.style.width = `${(current / total) * 100}%`;
 
       // 軽量サイズで圧縮 (SH-51Cの負荷を軽減)
-      const compressed = await compressToBase64(tasks[i].file, 640, 0.3);
+      const compressed = await compressToBase64(tasks[i].file, 1024, 0.3);
 
       // サーバーへ送信 (server.jsが Accepted 202 を即レスするので速い)
       const response = await fetch("/upload", {
