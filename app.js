@@ -135,7 +135,7 @@ async function send() {
       { id: 'photos_bedroom', label: '寝室' },
       { id: 'photos_hallway', label: '廊下' },
       { id: 'photos_equipment', label: 'エアコン本体/照明/WiFi/鍵' },
-      { id: 'photos_others', label: '物件指定破損' },
+      { id: 'photos_others', label: '物件指定の清掃' },
       { id: 'regular_1', label: '定期_リビング' },
       { id: 'regular_2', label: '定期_寝室' },
       { id: 'regular_3', label: '定期_キッチン' },
