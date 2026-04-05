@@ -7,7 +7,7 @@ window.addEventListener('DOMContentLoaded', () => {
     const today = new Date().toISOString().split('T')[0];
     dateInput.value = today;
   }
-  
+
   toggleInputsByWorkType();
   updateButtonState();
 
@@ -53,7 +53,7 @@ function toggleInputsByWorkType() {
       const el = document.getElementById(id);
       if (el) {
         el.disabled = !enabled;
-        if (!enabled) el.value = ""; 
+        if (!enabled) el.value = "";
       }
     });
   };
@@ -91,14 +91,14 @@ async function send() {
     filter: "フィルター清掃のみ"
   };
 
-  
+
   // --- 2. 確認ダイアログの表示 ---
   const confirmMsg = `以下の内容で送信します。よろしいですか？\n\n` +
-                     `📅 清掃日：${reportDate}\n` +
-                     `👤 担当者：${staff}\n` +
-                     `🏠 現場名：${site}\n` +
-                     `📋 区分：${workTypeLabels[workType]}` +
-                     (workType === 'filter' || workType === 'full' ? `\n⏱️ フィルター清掃時間：${workTime}分` : "");
+    `📅 清掃日：${reportDate}\n` +
+    `👤 担当者：${staff}\n` +
+    `🏠 現場名：${site}\n` +
+    `📋 区分：${workTypeLabels[workType]}` +
+    (workType === 'filter' || workType === 'full' ? `\n⏱️ フィルター清掃時間：${workTime}分` : "");
 
   if (!confirm(confirmMsg)) {
     return;
@@ -234,7 +234,7 @@ function resetFormExceptStaff() {
   const normalRadio = document.querySelector('input[name="workType"][value="normal"]');
   if (normalRadio) {
     normalRadio.checked = true;
-    toggleInputsByWorkType(); 
+    toggleInputsByWorkType();
   }
 
   const btn = document.getElementById("submitBtn");
@@ -284,27 +284,27 @@ function updateButtonState() {
   const workTime = document.getElementById("workTime")?.value;
 
   // --- 必須項目の定義（(任意) 以外のIDをリストアップ） ---
-  
+
   // 通常清掃の必須（othersは除外）
   const requiredNormalIds = [
-    'photos_amenity', 'photos_kitchen', 'photos_bath', 'photos_living', 'photos_bedroom', 'photos_equipment', 'photos_others'
+    'photos_amenity', 'photos_kitchen', 'photos_bath', 'photos_living', 'photos_bedroom', 'photos_equipment'
   ];
-  
+
   // 定期清掃の必須（regular_8は除外）
   const requiredRegularIds = [
-    'regular_1', 'regular_2', 'regular_3', 'regular_4', 
+    'regular_1', 'regular_2', 'regular_3', 'regular_4',
     'regular_5', 'regular_6', 'regular_7'
   ];
 
   // --- 各項目の入力状況チェック ---
-  
+
   // 「すべて(every)」ファイルが1枚以上選択されているか
   const generalCount = document.getElementById('photos_general')?.files?.length || 0;
   const isGeneralValid = generalCount >= 30;
   const isNormalComplete = requiredNormalIds.every(id => (document.getElementById(id)?.files?.length || 0) > 0) && isGeneralValid;
   const isRegularComplete = requiredRegularIds.every(id => (document.getElementById(id)?.files?.length || 0) > 0);
   const isFilterComplete = (document.getElementById('photos_filter')?.files?.length || 0) > 0;
-  
+
   // 作業時間の選択（空でなく、"0"でもないこと）
   const isTimeSelected = (workTime && workTime !== "" && workTime !== "0");
 
