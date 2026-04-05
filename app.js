@@ -346,6 +346,14 @@ document.addEventListener('change', (e) => {
       alert(`最大${limit}枚までです。`);
       e.target.value = "";
     }
+    // photos_general の下限チェック（30枚未満はリセット）
+    if (e.target.id === 'photos_general') {
+      const count = e.target.files.length;
+      if (count > 0 && count < 30) {
+        alert(`【その他全般】は30枚以上選択してください。\n現在${count}枚が選択されています。\n選択をやり直してください。`);
+        e.target.value = "";
+      }
+    }
   }
   // 何かが変わったらボタン判定
   updateButtonState();
