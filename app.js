@@ -24,7 +24,7 @@ window.addEventListener('DOMContentLoaded', () => {
  * 2. 枚数制限設定
  */
 const FILE_LIMITS = {
-  'photos_amenity': 5, 'photos_kitchen': 15,
+  'photos_amenity': 5, 'photos_general': 100, 'photos_kitchen': 15,
   'photos_bath': 15, 'photos_living': 15, 'photos_bedroom': 15,
   'photos_hallway': 10, 'photos_equipment': 20, 'photos_others': 10,
   'regular_1': 10, 'regular_2': 10, 'regular_3': 10, 'regular_4': 10,
@@ -129,6 +129,7 @@ async function send() {
   try {
     const fileInputs = [
       { id: 'photos_amenity', label: 'タオル/歯ブラシ' },
+      { id: 'photos_general', label: 'その他全般' },
       { id: 'photos_kitchen', label: 'キッチン' },
       { id: 'photos_bath', label: 'お風呂/洗面/トイレ' },
       { id: 'photos_living', label: 'リビング' },
@@ -286,7 +287,7 @@ function updateButtonState() {
   
   // 通常清掃の必須（othersは除外）
   const requiredNormalIds = [
-    'photos_amenity', 'photos_kitchen', 'photos_bath', 'photos_living', 'photos_bedroom', 'photos_equipment', 'photos_others'
+    'photos_amenity', 'photos_general', 'photos_kitchen', 'photos_bath', 'photos_living', 'photos_bedroom', 'photos_equipment', 'photos_others'
   ];
   
   // 定期清掃の必須（regular_8は除外）
@@ -298,7 +299,9 @@ function updateButtonState() {
   // --- 各項目の入力状況チェック ---
   
   // 「すべて(every)」ファイルが1枚以上選択されているか
-  const isNormalComplete = requiredNormalIds.every(id => (document.getElementById(id)?.files?.length || 0) > 0);
+  const generalCount = document.getElementById('photos_general')?.files?.length || 0;
+  const isGeneralValid = generalCount >= 30;
+  const isNormalComplete = requiredNormalIds.every(id => (document.getElementById(id)?.files?.length || 0) > 0) && isGeneralValid;
   const isRegularComplete = requiredRegularIds.every(id => (document.getElementById(id)?.files?.length || 0) > 0);
   const isFilterComplete = (document.getElementById('photos_filter')?.files?.length || 0) > 0;
   
