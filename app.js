@@ -24,7 +24,7 @@ window.addEventListener('DOMContentLoaded', () => {
  * 2. 枚数制限設定
  */
 const FILE_LIMITS = {
-  'photos_amenity': 5, 'photos_general': 100, 'photos_kitchen': 15,
+  'photos_amenity': 10, 'photos_general': 100, 'photos_kitchen': 15,
   'photos_bath': 15, 'photos_living': 15, 'photos_bedroom': 15,
   'photos_hallway': 10, 'photos_equipment': 20, 'photos_others': 10,
   'regular_1': 10, 'regular_2': 10, 'regular_3': 10, 'regular_4': 10,
