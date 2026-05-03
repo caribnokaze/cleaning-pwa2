@@ -128,7 +128,7 @@ async function send() {
 
   try {
     const fileInputs = [
-      { id: 'photos_amenity', label: 'タオル/歯ブラシ' },
+      { id: 'photos_amenity', label: 'タオル・歯ブラシ・Wi-Fi・NetFlix' },
       { id: 'photos_general', label: 'その他全般' },
       { id: 'photos_kitchen', label: 'キッチン' },
       { id: 'photos_bath', label: 'お風呂/洗面/トイレ' },
@@ -287,9 +287,9 @@ function updateButtonState() {
 
   // 通常清掃の必須（othersは除外）
   const requiredNormalIds = [
-   'photos_amenity'
+    'photos_amenity'
   ];
-  
+
   // 定期清掃の必須（regular_8は除外）
   const requiredRegularIds = [
     'regular_1', 'regular_2', 'regular_3', 'regular_4',
