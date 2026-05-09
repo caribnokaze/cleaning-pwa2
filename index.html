@@ -201,15 +201,15 @@
       </div>
     </div>
 
-    <hr style="border: 0; border-top: 2px dashed #333; margin: 25px 0;">
+    <hr class="section-line">
     
     <div class="form-group" id="area_normal">
-      <div style="display: flex; align-items: baseline; gap: 8px; margin-bottom: 10px;">
+      <div class="section-header">
         <label style="margin-bottom: 0; font-weight: bold;">🧹通常清掃写真：</label>
-        <span style="font-size: 0.75em; color: #777; font-weight: normal;">※各項目に最大アップロード数があります</span>
+        <span class="note-text">※各項目に最大アップロード数があります</span>
       </div>
       
-      <div style="margin-top: 10px; margin-bottom: 15px;">
+      <div class="upload-block">
         <label for="photos_amenity" style="display: block; font-size: 0.9em;">【タオル・歯ブラシ・Wi-Fi・NetFlix】 10枚以下</label>
         <input type="file" id="photos_amenity" multiple accept="image/*">
       </div>
@@ -220,53 +220,53 @@
       </div>
     </div>
 
-    <hr style="border: 0; border-top: 2px dashed #333; margin: 25px 0;">
+    <hr class="section-line">
 
     <div class="form-group" id="area_regular">
-      <div style="display: flex; align-items: baseline; gap: 8px; margin-bottom: 10px;">
+      <div class="section-header">
         <label style="margin-bottom: 0; font-weight: bold;">✨定期清掃写真：</label>
-        <span style="font-size: 0.75em; color: #777; font-weight: normal;">※各項目に最大アップロード数があります</span>
+        <span class="note-text">※各項目に最大アップロード数があります</span>
       </div>
 
       <div style="margin-bottom: 15px;">
         <label for="regular_1" style="display: block; font-size: 0.9em;">【リビング・共用スペース（室内】 10枚以下</label>
-        <small style="color: #666; display: block; margin-bottom: 5px;">・ソファの裏 ・テレビ裏</small>
+        <small class="small-note">・ソファの裏 ・テレビ裏</small>
         <input type="file" id="regular_1" multiple accept="image/*">
       </div>
 
       <div style="margin-bottom: 15px;">
         <label for="regular_2" style="display: block; font-size: 0.9em;">【寝室まわり】 10枚以下</label>
-        <small style="color: #666; display: block; margin-bottom: 5px;">・ベッド下</small>
+        <small class="small-note">・ベッド下</small>
         <input type="file" id="regular_2" multiple accept="image/*">
       </div>
 
       <div style="margin-bottom: 15px;">
         <label for="regular_3" style="display: block; font-size: 0.9em;">【キッチン・ダイニング】 10枚以下</label>
-        <small style="color: #666; display: block; margin-bottom: 5px;">・皿全部洗う ・トースター ・冷蔵庫の中全て</small>
+        <small class="small-note">・皿全部洗う ・トースター ・冷蔵庫の中全て</small>
         <input type="file" id="regular_3" multiple accept="image/*">
       </div>
 
       <div style="margin-bottom: 15px;">
         <label for="regular_4" style="display: block; font-size: 0.9em;">【浴室・洗面・トイレ（水回り）】 10枚以下</label>
-        <small style="color: #666; display: block; margin-bottom: 5px;">・パイプユニッシュ（お風呂、キッチン） ・洗濯槽洗浄 ・ドライヤーの埃除去</small>
+        <small class="small-note">・パイプユニッシュ（お風呂、キッチン） ・洗濯槽洗浄 ・ドライヤーの埃除去</small>
         <input type="file" id="regular_4" multiple accept="image/*">
       </div>
 
       <div style="margin-bottom: 15px;">
         <label for="regular_5" style="display: block; font-size: 0.9em;">【窓・建具】 10枚以下</label>
-        <small style="color: #666; display: block; margin-bottom: 5px;">・窓のサン、窓ガラス</small>
+        <small class="small-note">・窓のサン、窓ガラス</small>
         <input type="file" id="regular_5" multiple accept="image/*">
       </div>
 
       <div style="margin-bottom: 15px;">
         <label for="regular_6" style="display: block; font-size: 0.9em;">【屋外・外周】 10枚以下</label>
-        <small style="color: #666; display: block; margin-bottom: 5px;">・施設外周の蜘蛛の巣等</small>
+        <small class="small-note">・施設外周の蜘蛛の巣等</small>
         <input type="file" id="regular_6" multiple accept="image/*">
       </div>
 
       <div style="margin-bottom: 15px;">
         <label for="regular_7" style="display: block; font-size: 0.9em;">【場所横断】 10枚以下</label>
-        <small style="color: #666; display: block; margin-bottom: 5px;">・冊子 ・棚 ・電球（手が届く範囲で埃も除去）</small>
+        <small class="small-note">・冊子 ・棚 ・電球（手が届く範囲で埃も除去）</small>
         <input type="file" id="regular_7" multiple accept="image/*">
       </div>
 
@@ -276,11 +276,11 @@
       </div>
     </div>
 
-    <hr style="border: 0; border-top: 2px dashed #333; margin: 25px 0;">
+    <hr class="section-line">
 
     <div class="form-group" id="area_filter_photo">
       <label>🌬️フィルター清掃写真： 10枚以下</label>
-      <small style="color: #666; display: block; margin-bottom: 5px;">・エアコン（フィルター＋エアコン本体拭き上げ(手が届く場所のみ)）・キッチン換気扇 ・トイレ換気扇 ・浴室換気扇 ・物件指定の清掃箇所（例：園のブラインド拭き上げ等） ・その他埃が溜まる機器全般 (空気清浄機など)</small>
+      <small class="small-note">・エアコン（フィルター＋エアコン本体拭き上げ(手が届く場所のみ)）・キッチン換気扇 ・トイレ換気扇 ・浴室換気扇 ・物件指定の清掃箇所（例：園のブラインド拭き上げ等） ・その他埃が溜まる機器全般 (空気清浄機など)</small>
       <input type="file" id="photos_filter" multiple accept="image/*">
     </div>
 
@@ -299,7 +299,7 @@
       </select>
     </div>
 
-    <hr style="border: 0; border-top: 2px dashed #333; margin: 25px 0;">
+    <hr class="section-line">
 
     <button type="button" id="submitBtn" onclick="send()" disabled>送信</button>
 

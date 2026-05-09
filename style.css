@@ -147,3 +147,33 @@ input[type="radio"] {
   width: 100%;
   height: auto;
 }
+
+.section-line {
+  border: 0;
+  border-top: 2px dashed #333;
+  margin: 25px 0;
+}
+
+.section-header {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.note-text {
+  font-size: 0.75em;
+  color: #777;
+  font-weight: normal;
+}
+
+.upload-block {
+  margin-top: 10px;
+  margin-bottom: 15px;
+}
+
+.small-note {
+  color: #666;
+  display: block;
+  margin-bottom: 5px;
+}
