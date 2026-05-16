@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <script src="https://unpkg.com/dexie/dist/dexie.js"></script>
+  <title>TOCORO清掃完了写真アップロード</title>
   <link rel="stylesheet" href="style.css">
 </head>
 
@@ -305,14 +305,6 @@
 
     <img src="image/tocorologo.png" alt="TOCORO Clean Team ロゴ" class="footer-logo">
   </div>
-
-  <script>
-    // ブラウザ内DBの設定
-    const db = new Dexie("PhotoUploadDB");
-    db.version(1).stores({
-      queue: '++id, status' 
-    });
-  </script>
 
   <script src="app.js"></script>
 </body>
