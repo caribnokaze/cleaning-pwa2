@@ -118,7 +118,7 @@ async function send() {
       <div style="width:100%; height:15px; background:#444; border-radius:10px; overflow:hidden;">
         <div id="progress-bar" style="width:0%; height:100%; background:#28a745; transition:0.3s;"></div>
       </div>
-      <p style="font-size: 12px; margin-top: 20px;">サーバーへ転送中です。<br>アップロードが完了するまで画面を遷移（LINEを開いたり）しないでください</p>
+      <p style="font-size: 12px; margin-top: 20px;">サーバーへ転送中です。<br>アップロードが完了するまで画面を遷移（LINEを開いたり、画面を消したり）しないでください</p>
     </div>
   `;
   document.body.appendChild(lockLayer);
