@@ -1,0 +1,9 @@
+{
+  "appId": "com.tocoro.cleaning",
+  "appName": "TOCORO.清掃",
+  "webDir": "www",
+  "server": {
+    "url": "https://tocoro-report.com",
+    "cleartext": false
+  }
+}
