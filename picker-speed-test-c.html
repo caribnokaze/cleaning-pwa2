@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="robots" content="noindex, nofollow, noarchive">
+  <title>写真選択速度テスト（方式C）</title>
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: #173c33;
+      background: #f2f6f4;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100dvh;
+      background: #f2f6f4;
+    }
+
+    main {
+      width: min(720px, 100%);
+      margin: 0 auto;
+      padding: calc(22px + env(safe-area-inset-top)) 16px
+        calc(32px + env(safe-area-inset-bottom));
+    }
+
+    h1 {
+      margin: 0 0 10px;
+      font-size: clamp(22px, 6vw, 30px);
+      line-height: 1.3;
+    }
+
+    p { line-height: 1.65; }
+
+    .notice,
+    .panel {
+      margin-top: 16px;
+      padding: 16px;
+      border-radius: 14px;
+      background: #fff;
+      box-shadow: 0 6px 24px rgb(22 68 56 / 8%);
+    }
+
+    .notice {
+      border: 1px solid #b8d8ce;
+      color: #31564d;
+      font-size: 14px;
+    }
+
+    .notice strong { color: #11604e; }
+
+    button {
+      width: 100%;
+      min-height: 58px;
+      border: 0;
+      border-radius: 12px;
+      background: #16745e;
+      color: #fff;
+      font: inherit;
+      font-size: 17px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    button:disabled {
+      cursor: wait;
+      opacity: 0.6;
+    }
+
+    button + button { margin-top: 10px; }
+
+    button.secondary {
+      border: 2px solid #16745e;
+      background: #fff;
+      color: #16745e;
+    }
+
+    #rawInput,
+    #fileInput { display: none; }
+
+    .status-title {
+      margin: 0 0 12px;
+      font-size: 19px;
+    }
+
+    .metrics {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 8px 16px;
+      margin: 0;
+    }
+
+    .metrics dt,
+    .metrics dd { margin: 0; }
+    .metrics dd { font-variant-numeric: tabular-nums; }
+
+    .progress {
+      height: 12px;
+      margin-top: 16px;
+      overflow: hidden;
+      border-radius: 999px;
+      background: #dce8e4;
+    }
+
+    .progress > div {
+      width: 0;
+      height: 100%;
+      border-radius: inherit;
+      background: #16745e;
+      transition: width 120ms linear;
+    }
+
+    .preview {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 5px;
+      margin-top: 16px;
+    }
+
+    .preview img {
+      width: 100%;
+      aspect-ratio: 1;
+      border-radius: 7px;
+      background: #dce5e2;
+      object-fit: cover;
+    }
+
+    .small {
+      margin-bottom: 0;
+      color: #62746f;
+      font-size: 13px;
+    }
+
+    .error { color: #b42318; }
+
+    .back {
+      display: inline-block;
+      margin-top: 20px;
+      color: #126853;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>写真選択速度テスト（方式C）</h1>
+    <p>
+      ギガファイル便に近い一般ファイル選択を使い、画面を先に表示してから、
+      最初の5枚の表示と圧縮を遅れて開始します。
+    </p>
+
+    <div class="notice">
+      <strong>S3への送信は一切行いません。</strong><br>
+      選択した写真はこの端末内でテスト処理され、ページを閉じると破棄されます。
+      比較時は画像だけを5枚、次に100枚選択してください。
+    </div>
+
+    <div class="panel">
+      <!-- どちらもacceptを付けず、一般ファイル入力経路を検証する。 -->
+      <input id="rawInput" type="file" multiple>
+      <button id="rawButton" class="secondary" type="button">
+        ① ギガファイル相当（選択後は処理しない）
+      </button>
+      <input id="fileInput" type="file" multiple>
+      <button id="selectButton" type="button">
+        ② 改良方式C（画面復帰後に圧縮）
+      </button>
+      <p class="small">
+        最初に①で純粋な復帰速度を確認し、次に②で同じ枚数を選んでください。
+        動画なども選択画面には表示されますが、②では画像以外を圧縮しません。
+      </p>
+    </div>
+
+    <section id="resultPanel" class="panel" aria-live="polite">
+      <h2 id="statusTitle" class="status-title">未実行</h2>
+      <dl class="metrics">
+        <dt>選択ファイル数</dt><dd id="selectedCount">0</dd>
+        <dt>画像ファイル数</dt><dd id="imageCount">0</dd>
+        <dt>画面描画待ち</dt><dd id="paintTime">-</dd>
+        <dt>圧縮</dt><dd id="compressionCount">0 / 0</dd>
+        <dt>圧縮成功</dt><dd id="successCount">0</dd>
+        <dt>圧縮失敗</dt><dd id="failureCount">0</dd>
+        <dt>元の合計容量</dt><dd id="originalSize">0 MB</dd>
+        <dt>圧縮後の合計容量</dt><dd id="compressedSize">0 MB</dd>
+        <dt>圧縮経過時間</dt><dd id="compressionTime">-</dd>
+      </dl>
+      <div class="progress" aria-hidden="true"><div id="progressBar"></div></div>
+      <div id="preview" class="preview"></div>
+      <p id="message" class="small">
+        iPhoneの「完了」を押してから、この画面が見えるまでの体感時間も確認してください。
+      </p>
+    </section>
+
+    <a class="back" href="/">通常のアップロード画面へ戻る</a>
+  </main>
+
+  <script>
+    (() => {
+      const rawInput = document.getElementById("rawInput");
+      const rawButton = document.getElementById("rawButton");
+      const input = document.getElementById("fileInput");
+      const selectButton = document.getElementById("selectButton");
+      const statusTitle = document.getElementById("statusTitle");
+      const selectedCount = document.getElementById("selectedCount");
+      const imageCount = document.getElementById("imageCount");
+      const paintTime = document.getElementById("paintTime");
+      const compressionCount = document.getElementById("compressionCount");
+      const successCount = document.getElementById("successCount");
+      const failureCount = document.getElementById("failureCount");
+      const originalSize = document.getElementById("originalSize");
+      const compressedSize = document.getElementById("compressedSize");
+      const compressionTime = document.getElementById("compressionTime");
+      const progressBar = document.getElementById("progressBar");
+      const preview = document.getElementById("preview");
+      const message = document.getElementById("message");
+
+      let runId = 0;
+      let previewUrls = [];
+
+      const formatBytes = (bytes) => `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+      const formatSeconds = (milliseconds) => `${(milliseconds / 1000).toFixed(1)}秒`;
+
+      function clearPreview() {
+        previewUrls.forEach((url) => URL.revokeObjectURL(url));
+        previewUrls = [];
+        preview.replaceChildren();
+      }
+
+      function resetResult(totalFiles, totalImages) {
+        clearPreview();
+        statusTitle.textContent = "画面へ復帰しました";
+        selectedCount.textContent = String(totalFiles);
+        imageCount.textContent = totalImages == null ? "未確認" : String(totalImages);
+        paintTime.textContent = "計測中";
+        compressionCount.textContent = totalImages == null ? "待機中" : `0 / ${totalImages}`;
+        successCount.textContent = "0";
+        failureCount.textContent = "0";
+        originalSize.textContent = "0 MB";
+        compressedSize.textContent = "0 MB";
+        compressionTime.textContent = "待機中";
+        progressBar.style.width = "0%";
+        message.classList.remove("error");
+        message.textContent =
+          "画面を先に描画しています。プレビューと圧縮は少し遅れて始まります。";
+      }
+
+      function renderPreview(files, currentRunId) {
+        if (currentRunId !== runId) return;
+        clearPreview();
+        files.slice(0, 5).forEach((file) => {
+          const img = document.createElement("img");
+          const url = URL.createObjectURL(file);
+          previewUrls.push(url);
+          img.src = url;
+          img.alt = file.name;
+          preview.append(img);
+        });
+      }
+
+      function compressImage(file) {
+        return new Promise((resolve, reject) => {
+          const sourceUrl = URL.createObjectURL(file);
+          const img = new Image();
+
+          const release = () => URL.revokeObjectURL(sourceUrl);
+          img.onerror = () => {
+            release();
+            reject(new Error(`${file.name}を画像として読み込めませんでした`));
+          };
+
+          img.onload = () => {
+            release();
+            try {
+              const maxWidth = 720;
+              let width = img.naturalWidth || img.width;
+              let height = img.naturalHeight || img.height;
+              if (width > maxWidth) {
+                height = Math.round((height * maxWidth) / width);
+                width = maxWidth;
+              }
+
+              const canvas = document.createElement("canvas");
+              canvas.width = width;
+              canvas.height = height;
+              const context = canvas.getContext("2d");
+              if (!context) throw new Error("Canvasを利用できません");
+              context.drawImage(img, 0, 0, width, height);
+              canvas.toBlob(
+                (blob) => blob ? resolve(blob) : reject(new Error("JPEG圧縮に失敗しました")),
+                "image/jpeg",
+                0.45,
+              );
+            } catch (error) {
+              reject(error);
+            }
+          };
+
+          img.src = sourceUrl;
+        });
+      }
+
+      async function runCompression(files, currentRunId) {
+        if (currentRunId !== runId) return;
+        const startedAt = performance.now();
+        let cursor = 0;
+        let processed = 0;
+        let succeeded = 0;
+        let failed = 0;
+        let sourceBytes = 0;
+        let outputBytes = 0;
+
+        statusTitle.textContent = "画面復帰後に圧縮中";
+        compressionTime.textContent = "0.0秒";
+
+        function publish() {
+          if (currentRunId !== runId) return;
+          compressionCount.textContent = `${processed} / ${files.length}`;
+          successCount.textContent = String(succeeded);
+          failureCount.textContent = String(failed);
+          originalSize.textContent = formatBytes(sourceBytes);
+          compressedSize.textContent = formatBytes(outputBytes);
+          compressionTime.textContent = formatSeconds(performance.now() - startedAt);
+          progressBar.style.width = `${files.length ? processed / files.length * 100 : 0}%`;
+        }
+
+        async function worker() {
+          while (currentRunId === runId) {
+            const index = cursor++;
+            if (index >= files.length) return;
+            const file = files[index];
+            sourceBytes += file.size;
+            try {
+              const blob = await compressImage(file);
+              if (currentRunId !== runId) return;
+              outputBytes += blob.size;
+              succeeded++;
+            } catch (error) {
+              failed++;
+              console.warn("圧縮テスト失敗", file.name, error);
+            } finally {
+              processed++;
+              publish();
+            }
+          }
+        }
+
+        await Promise.all(
+          Array.from({ length: Math.min(2, files.length) }, () => worker()),
+        );
+
+        if (currentRunId !== runId) return;
+        statusTitle.textContent = failed ? "圧縮テスト完了（一部失敗）" : "圧縮テスト完了";
+        message.textContent =
+          "S3には送信していません。5枚と100枚の画面復帰時間を比較してください。";
+        if (failed) message.classList.add("error");
+        publish();
+      }
+
+      selectButton.addEventListener("click", () => {
+        input.value = "";
+        input.click();
+      });
+
+      rawButton.addEventListener("click", () => {
+        rawInput.value = "";
+        rawInput.click();
+      });
+
+      // ギガファイル便相当：FileListの列挙・種別確認・プレビュー・圧縮を行わない。
+      rawInput.addEventListener("change", () => {
+        const total = rawInput.files?.length || 0;
+        if (!total) return;
+
+        const currentRunId = ++runId;
+        const callbackStartedAt = performance.now();
+        resetResult(total, null);
+        statusTitle.textContent = "① 選択完了（追加処理なし）";
+        compressionCount.textContent = "実行しない";
+        compressionTime.textContent = "実行しない";
+        message.textContent =
+          "ファイル本体・種類・名前・容量には触れていません。画面復帰の体感時間を確認してください。";
+
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            if (currentRunId !== runId) return;
+            paintTime.textContent = `${Math.round(performance.now() - callbackStartedAt)}ms`;
+          });
+        });
+      });
+
+      input.addEventListener("change", () => {
+        const selectedFiles = input.files;
+        const total = selectedFiles?.length || 0;
+        if (!total) return;
+
+        const currentRunId = ++runId;
+        const callbackStartedAt = performance.now();
+        resetResult(total, null);
+
+        // FileListの列挙前に2フレーム待ち、戻ったWeb画面を最優先で描画する。
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            if (currentRunId !== runId) return;
+            paintTime.textContent = `${Math.round(performance.now() - callbackStartedAt)}ms`;
+            message.textContent =
+              "画面描画完了。1秒待ってからファイル確認・プレビュー・圧縮を開始します。";
+
+            window.setTimeout(() => {
+              if (currentRunId !== runId) return;
+              const files = Array.from(selectedFiles || []);
+              const images = files.filter((file) => file.type.startsWith("image/"));
+              imageCount.textContent = String(images.length);
+              compressionCount.textContent = `0 / ${images.length}`;
+
+              if (!images.length) {
+                statusTitle.textContent = "画像が選択されていません";
+                compressionTime.textContent = "-";
+                message.textContent = "画像ファイルを選択して、もう一度試してください。";
+                message.classList.add("error");
+                return;
+              }
+
+              renderPreview(images, currentRunId);
+              window.setTimeout(
+                () => void runCompression(images, currentRunId),
+                250,
+              );
+            }, 1000);
+          });
+        });
+      });
+
+      window.addEventListener("pagehide", () => {
+        runId++;
+        clearPreview();
+      });
+    })();
+  </script>
+</body>
+</html>

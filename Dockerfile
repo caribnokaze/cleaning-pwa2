@@ -1,11 +1,11 @@
-FROM node:18-slim
+FROM node:20-slim
 
 # アプリケーションディレクトリを作成
 WORKDIR /usr/src/app
 
 # パッケージ定義をコピーしてインストール
 COPY package*.json ./
-RUN npm install
+RUN npm ci --omit=dev
 
 # 全ファイルをコピー
 COPY . .

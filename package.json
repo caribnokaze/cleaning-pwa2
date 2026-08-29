@@ -3,13 +3,21 @@
   "version": "1.0.0",
   "main": "server.js",
   "dependencies": {
-    "express": "^4.18.2",
-    "axios": "^1.6.0",
-    "body-parser": "^1.20.2",
-    "cors": "^2.8.5",
-    "googleapis": "^133.0.0"
+    "@aws-sdk/client-apprunner": "^3.1072.0",
+    "@aws-sdk/client-ecr": "^3.1072.0",
+    "@aws-sdk/client-iam": "^3.1072.0",
+    "@aws-sdk/client-lambda": "^3.1072.0",
+    "@aws-sdk/client-s3": "^3.500.0",
+    "@aws-sdk/client-secrets-manager": "^3.1072.0",
+    "@aws-sdk/client-sts": "^3.1072.0",
+    "@aws-sdk/s3-request-presigner": "^3.500.0",
+    "archiver": "^7.0.1",
+    "dotenv": "^16.4.5",
+    "express": "^4.18.2"
   },
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "deploy:aws": "node scripts/deploy-aws.js",
+    "deploy:lambda": "node scripts/deploy-lambda.js"
   }
 }

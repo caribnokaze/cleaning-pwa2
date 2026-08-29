@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="ja">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -11,96 +12,121 @@
 
   <div class="container">
     <h2>
-      TOCORO清掃スタッフ専用<br>
+      TOCORO.清掃スタッフ専用<br>
       完了写真アップロードシステム
     </h2>
+
+    <p style="text-align: center;">
+      <a id="galleryLink" href="gallery.html">📷 アップロード済み写真を見る</a>
+      <span aria-hidden="true"> ｜ </span>
+      <a class="logout-link" href="/logout">ログアウト</a>
+    </p>
 
     <div class="form-group">
       <label for="reportDate">📅清掃日：</label>
       <input type="date" id="reportDate">
     </div>
-    
+
     <div class="form-group">
-      <label for="staff">👤担当者名：</label>
-      <select id="staff">
-        <option value="">選択してください</option>
-        <option value="今泉とき枝">今泉とき枝</option>
-        <option value="天野勝久">天野勝久</option>
-        <option value="坂本国雄">坂本国雄</option>
-        <option value="山村哲二">山村哲二</option>
-        <option value="渡辺秀美">渡辺秀美</option>
-        <option value="副島弥生">副島弥生</option>
-        <option value="猪俣直樹">猪俣直樹</option>
-        <option value="宮崎由美子">宮崎由美子</option>
-        <option value="荒井かおり">荒井かおり</option>
-        <option value="奥脇久美子">奥脇久美子</option>
-        <option value="吉沢麻衣子">吉沢麻衣子</option>
-        <option value="高根里央菜">高根里央菜</option>
-        <option value="樫村勝巳">樫村勝巳</option>
-        <option value="羽田早百合">羽田早百合</option>
-        <option value="小林千秋">小林千秋</option>
-        <option value="松本和雄">松本和雄</option>
-        <option value="稀代彩菜">稀代彩菜</option>
-        <option value="鈴木香菜">鈴木香菜</option>
-        <option value="萱沼亜矢乃">萱沼亜矢乃</option>
-        <option value="吉村美由紀">吉村美由紀</option>
-        <option value="桑原怜那">桑原怜那</option>
-        <option value="宮本理恵">宮本理恵</option>
-        <option value="菅谷みゆき">菅谷みゆき</option>
-        <option value="大森かれん">大森かれん</option>
-        <option value="髙村晋哉">髙村晋哉</option>
-        <option value="羽田益美">羽田益美</option>
-        <option value="渡邊暁美">渡邊暁美</option>
-        <option value="渡辺あゆか">渡辺あゆか</option>
-        <option value="舟久保志穂">舟久保志穂</option>
-        <option value="鈴木佐世">鈴木佐世</option>
-        <option value="渡辺香菜">渡辺香菜</option>
-        <option value="廣瀬麻紀子">廣瀬麻紀子</option>
-        <option value="鎌田彩佳">鎌田彩佳</option>
-        <option value="市村久美">市村久美</option>
-        <option value="志村春美">志村春美</option>
-        <option value="長田実香">長田実香</option>
-        <option value="栗林美穂">栗林美穂</option>
-        <option value="山田洵也">山田洵也</option>
-        <option value="舩木優希子">舩木優希子</option>
-        <option value="山本怜似菜">山本怜似菜</option>
-        <option value="土橋愛美">土橋愛美</option>
-        <option value="粕谷翔太">粕谷翔太</option>
-        <option value="宮下美紀">宮下美紀</option>
-        <option value="倉沢由美">倉沢由美</option>
-        <option value="中澤健">中澤健</option>
-        <option value="平井衿奈">平井衿奈</option>
-        <option value="齊藤真依">齊藤真依</option>
-        <option value="渡辺紋樺">渡辺紋樺</option>
-        <option value="池谷さき">池谷さき</option>
-        <option value="堀内瑞紀">堀内瑞紀</option>
-        <option value="渡辺真奈美">渡辺真奈美</option>
-        <option value="内田千寛">内田千寛</option>
-        <option value="渡邉一輝">渡邉一輝</option>
-        <option value="佐久間翔大">佐久間翔大</option>
-        <option value="宮本南">宮本南</option>
-        <option value="滝口初">滝口初</option>
-        <option value="宮下龍希">宮下龍希</option>
-        <option value="山田一志">山田一志</option>
-        <option value="杉本俊子">杉本俊子</option>
-        <option value="大友麻未">大友麻未</option>
-        <option value="大友琢磨">大友琢磨</option>
-        <option value="小野秀美">小野秀美</option>
-        <option value="中塚貴子">中塚貴子</option>
-        <option value="北川容吏">北川容吏</option>
-        <option value="スタッフ">スタッフ</option>
+      <label for="staffDisplay">👤担当者名：</label>
+      <div class="searchable-select">
+      <input id="staffDisplay" type="text" placeholder="番号または氏名を入力して検索" autocomplete="off"
+        role="combobox" aria-autocomplete="list" aria-controls="staffSuggestions" aria-expanded="false">
+      <input id="staff" type="hidden">
+      <select id="staffOptions" hidden>
+        <option value="今泉とき枝" label="01 今泉とき枝"></option>
+        <option value="天野勝久" label="02 天野勝久"></option>
+        <option value="坂本国雄" label="04 坂本国雄"></option>
+        <option value="山村哲二" label="05 山村哲二"></option>
+        <option value="渡辺秀美" label="06 渡辺秀美"></option>
+        <option value="猪俣直樹" label="08 猪俣直樹"></option>
+        <option value="宮崎由美子" label="10 宮崎由美子"></option>
+        <option value="荒井かおり" label="11 荒井かおり"></option>
+        <option value="奥脇久美子" label="12 奥脇久美子"></option>
+        <option value="吉沢麻衣子" label="13 吉沢麻衣子"></option>
+        <option value="希代なおみ" label="14 希代なおみ"></option>
+        <option value="高根里央菜" label="15 高根里央菜"></option>
+        <option value="樫村勝巳" label="16 樫村勝巳"></option>
+        <option value="羽田早百合" label="17 羽田早百合"></option>
+        <option value="小林千秋" label="18 小林千秋"></option>
+        <option value="松本和雄" label="22 松本和雄"></option>
+        <option value="稀代彩菜" label="24 稀代彩菜"></option>
+        <option value="鈴木香菜" label="27 鈴木香菜"></option>
+        <option value="萱沼亜矢乃" label="29 萱沼亜矢乃"></option>
+        <option value="吉村美由紀" label="30 吉村美由紀"></option>
+        <option value="桑原怜那" label="31 桑原怜那"></option>
+        <option value="宮本理恵" label="32 宮本理恵"></option>
+        <option value="菅谷みゆき" label="33 菅谷みゆき"></option>
+        <option value="大森かれん" label="34 大森かれん"></option>
+        <option value="髙村晋哉" label="35 髙村晋哉"></option>
+        <option value="羽田益美" label="36 羽田益美"></option>
+        <option value="渡邊暁美" label="38 渡邊暁美"></option>
+        <option value="渡辺あゆか" label="39 渡辺あゆか"></option>
+        <option value="鈴木佐世" label="41 鈴木佐世"></option>
+        <option value="廣瀬麻紀子" label="43 廣瀬麻紀子"></option>
+        <option value="鎌田彩佳" label="44 鎌田彩佳"></option>
+        <option value="市村久美" label="45 市村久美"></option>
+        <option value="志村春美" label="46 志村春美"></option>
+        <option value="栗林美穂" label="48 栗林美穂"></option>
+        <option value="山田洵也" label="49 山田洵也"></option>
+        <option value="土橋愛美" label="52 土橋愛美"></option>
+        <option value="宮下美紀" label="54 宮下美紀"></option>
+        <option value="倉沢由美" label="55 倉沢由美"></option>
+        <option value="中澤健" label="56 中澤健"></option>
+        <option value="平井衿奈" label="57 平井衿奈"></option>
+        <option value="齊藤真依" label="58 齊藤真依"></option>
+        <option value="渡辺紋樺" label="59 渡辺紋樺"></option>
+        <option value="池谷さき" label="60 池谷さき"></option>
+        <option value="堀内瑞紀" label="61 堀内瑞紀"></option>
+        <option value="渡辺真奈美" label="62 渡辺真奈美"></option>
+        <option value="内田千寛" label="63 内田千寛"></option>
+        <option value="渡邉一輝" label="65 渡邉一輝"></option>
+        <option value="稀代絵菜" label="66 稀代絵菜"></option>
+        <option value="鷲谷倫子" label="67 鷲谷倫子"></option>
+        <option value="佐久間翔大" label="68 佐久間翔大"></option>
+        <option value="宮本南" label="69 宮本南"></option>
+        <option value="杉本俊子" label="73 杉本俊子"></option>
+        <option value="大友麻未" label="74 大友麻未"></option>
+        <option value="小野秀美" label="75 小野秀美"></option>
+        <option value="中塚貴子" label="77 中塚貴子"></option>
+        <option value="北川容吏" label="78 北川容吏"></option>
+        <option value="杉田綾" label="79 杉田綾"></option>
+        <option value="安斉伸一" label="80 安斉伸一"></option>
+        <option value="長田智代" label="82 長田智代"></option>
+        <option value="渡邉まるみ" label="83 渡邉まるみ"></option>
+        <option value="小俣雅人" label="84 小俣雅人"></option>
+        <option value="渡邊眞理子" label="85 渡邊眞理子"></option>
+        <option value="小佐野月詩" label="86 小佐野月詩"></option>
+        <option value="長澤愛美" label="87 長澤愛美"></option>
+        <option value="宇治克哉" label="88 宇治克哉"></option>
+        <option value="SC1 加藤祐樹" label="加藤祐樹"></option>
+        <option value="SC2 圓谷光希" label="圓谷光希"></option>
+        <option value="SC3 渡邊夕凛" label="渡邊夕凛"></option>
+        <option value="井上貴希" label="井上貴希"></option>
+        <option value="北畑雅" label="北畑雅"></option>
+        <option value="ロサン" label="ロサン"></option>
+        <option value="大西真登" label="大西真登"></option>
+        <option value="清水夏海" label="清水夏海"></option>
+        <option value="柴崎日向" label="柴崎日向"></option>
       </select>
+      <div id="staffSuggestions" class="searchable-select-options" role="listbox" hidden></div>
+      </div>
     </div>
 
     <div class="form-group">
-      <label for="site">🏠現場名：</label>
-      <select id="site">
+      <label for="siteDisplay">🏠現場名：</label>
+      <div class="searchable-select">
+      <input id="siteDisplay" type="text" placeholder="現場名を入力して検索" autocomplete="off"
+        role="combobox" aria-autocomplete="list" aria-controls="siteSuggestions" aria-expanded="false">
+      <input id="site" type="hidden">
+      <select id="siteOptions" hidden>
         <option value="" disabled selected>選択してください</option>
         <option value="aoki">aoki</option>
         <option value="APRO8">APRO8</option>
         <option value="APRO9">APRO9</option>
         <option value="APRO10">APRO10</option>
         <option value="APRO11">APRO11</option>
+        <option value="APRO14">APRO14</option>
         <option value="APRO16">APRO16</option>
         <option value="APRO17">APRO17</option>
         <option value="BoccA">BoccA</option>
@@ -113,6 +139,7 @@
         <option value="Forest">Forest</option>
         <option value="FuA">FuA</option>
         <option value="FuB">FuB</option>
+        <option value="Fujisan Lodge En">Fujisan Lodge En</option>
         <option value="Furaku-Cat">Furaku-Cat</option>
         <option value="Furaku-Dog">Furaku-Dog</option>
         <option value="Furaku-Poodle">Furaku-Poodle</option>
@@ -148,6 +175,7 @@
         <option value="MORI">MORI</option>
         <option value="MUTSUKI">MUTSUKI</option>
         <option value="Nagomi">Nagomi</option>
+        <option value="Nagomi富士吉田">Nagomi富士吉田</option>
         <option value="pure">pure</option>
         <option value="RAKUWA">RAKUWA</option>
         <option value="RISA">RISA</option>
@@ -155,28 +183,48 @@
         <option value="SORA">SORA</option>
         <option value="STATION">STATION</option>
         <option value="TAKUMI">TAKUMI</option>
+        <option value="TOKIHI 東(EAST)">TOKIHI 東(EAST)</option>
+        <option value="TOKIHI 西(WEST)">TOKIHI 西(WEST)</option>
         <option value="Warabi">Warabi</option>
         <option value="W-REVIVE">W-REVIVE</option>
         <option value="yawaragi">yawaragi</option>
         <option value="ZURA">ZURA</option>
-        <option value="天庵">天庵</option>
+        <option value="天庵">天庵</option>  
+        <option value="岩切邸">岩切邸</option>
         <option value="エラーブル風">エラーブル風</option>
         <option value="エラーブル禅">エラーブル禅</option>
         <option value="園ENN">園ENN</option>
+        <option value="奥富士レイクサイド">奥富士レイクサイド</option>
         <option value="金魚">金魚</option>
         <option value="空KUU">空KUU</option>
+        <option value="空間">空間</option>
         <option value="湖凪">湖凪</option>
         <option value="心">心</option>
         <option value="さくや301">さくや301</option>
         <option value="さくや302">さくや302</option>
         <option value="燦々">燦々</option>
+        <option value="四季禅">四季禅</option>
         <option value="雫">雫</option>
         <option value="月ノ森">月ノ森</option>
         <option value="つるば舎">つるば舎</option>
         <option value="響">響</option>
         <option value="富美">富美</option>
+        <option value="富士禅">富士禅</option>
+        <option value="ブルースカイ">ブルースカイ</option>
         <option value="ヘルシンキ">ヘルシンキ</option>
+        <option value="木座">木座</option> 
+        <option value="101 サターン">101 サターン</option>
+        <option value="102 ジュピター">102 ジュピター</option>
+        <option value="103 マーズ">103 マーズ</option>
+        <option value="104 ヴィーナス">104 ヴィーナス</option>
+        <option value="105 マーキュリー">105 マーキュリー</option>
+        <option value="106 ベルテント1">106 ベルテント</option>
+        <option value="107 ベルテント2">107 ベルテント2</option>
+        <option value="108 ノルディスク">108 ノルディスク</option>
+        <option value="109 ベルテント">109 ベルテント</option>
       </select>
+      <div id="siteSuggestions" class="searchable-select-options" role="listbox" hidden></div>
+      </div>
     </div>
 
     <div class="form-group">
@@ -202,13 +250,13 @@
     </div>
 
     <hr class="section-line">
-    
+
     <div class="form-group" id="area_normal">
       <div class="section-header">
         <label style="margin-bottom: 0; font-weight: bold;">🧹通常清掃写真：</label>
         <span class="note-text">※各項目に最大アップロード数があります</span>
       </div>
-      
+
       <div class="upload-block">
         <label for="photos_amenity" style="display: block; font-size: 0.9em;">【タオル・歯ブラシ・Wi-Fi・NetFlix】 10枚以下</label>
         <input type="file" id="photos_amenity" multiple accept="image/*">
@@ -280,7 +328,8 @@
 
     <div class="form-group" id="area_filter_photo">
       <label>🌬️フィルター清掃写真： 10枚以下</label>
-      <small class="small-note">・エアコン（フィルター＋エアコン本体拭き上げ(手が届く場所のみ)）・キッチン換気扇 ・トイレ換気扇 ・浴室換気扇 ・物件指定の清掃箇所（例：園のブラインド拭き上げ等） ・その他埃が溜まる機器全般 (空気清浄機など)</small>
+      <small class="small-note">・エアコン（フィルター＋エアコン本体拭き上げ(手が届く場所のみ)）・キッチン換気扇 ・トイレ換気扇 ・浴室換気扇 ・物件指定の清掃箇所（例：園のブラインド拭き上げ等）
+        ・その他埃が溜まる機器全般 (空気清浄機など)</small>
       <input type="file" id="photos_filter" multiple accept="image/*">
     </div>
 
@@ -306,14 +355,16 @@
     <img src="image/tocorologo.png" alt="TOCORO Clean Team ロゴ" class="footer-logo">
   </div>
 
+  <script src="session.js"></script>
   <script>
     // ブラウザ内DBの設定
     const db = new Dexie("PhotoUploadDB");
     db.version(1).stores({
-      queue: '++id, status' 
+      queue: '++id, status'
     });
   </script>
 
   <script src="app.js"></script>
 </body>
+
 </html>

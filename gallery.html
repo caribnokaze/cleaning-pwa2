@@ -1,0 +1,1244 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>清掃写真一覧</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --primary: #176b55;
+      --primary-dark: #0f4f3f;
+      --surface: #fff;
+      --background: #f3f6f5;
+      --border: #dce5e2;
+      --text: #1f2926;
+      --muted: #66736f;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: var(--background);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      padding: 14px max(16px, calc((100% - 1180px) / 2));
+      background: rgba(255, 255, 255, 0.96);
+      border-bottom: 1px solid var(--border);
+      backdrop-filter: blur(8px);
+    }
+
+    .header-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    h1 { margin: 0; font-size: clamp(20px, 4vw, 28px); }
+
+    .back-link, .download-button {
+      color: var(--primary);
+      font-weight: 700;
+      text-decoration: none;
+    }
+
+    .header-links { display: flex; align-items: center; gap: 14px; }
+    .logout-link { color: #c62828; }
+
+    main { width: min(1180px, 100%); margin: 0 auto; padding: 18px 16px 48px; }
+
+    .filters {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      padding: 16px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      box-shadow: 0 4px 18px rgba(22, 66, 53, 0.06);
+    }
+
+    .field {
+      min-width: 0;
+    }
+
+    .field label {
+      display: block;
+      margin-bottom: 5px;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    input, select {
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
+      min-height: 44px;
+      padding: 9px 10px;
+      border: 1px solid #bdcbc7;
+      border-radius: 8px;
+      background: #fff;
+      color: var(--text);
+      font-size: 16px;
+    }
+
+    input[type="date"] {
+      display: block;
+      width: 100% !important;
+      inline-size: 100% !important;
+      min-width: 0;
+      min-inline-size: 0;
+      max-width: 100%;
+      max-inline-size: 100%;
+      -webkit-appearance: none;
+      appearance: none;
+    }
+
+    input[type="date"]::-webkit-date-and-time-value {
+      margin: 0;
+      text-align: left;
+    }
+
+    .summary { margin: 16px 2px 10px; color: var(--muted); }
+
+    .report-button {
+      flex: 0 0 auto;
+      min-height: 42px;
+      padding: 9px 14px;
+      border: 0;
+      border-radius: 8px;
+      background: var(--primary);
+      color: #fff;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .report-button:hover { background: var(--primary-dark); }
+    .report-button:disabled { background: #9aa7a3; cursor: not-allowed; }
+
+    .report {
+      margin-bottom: 18px;
+      overflow: hidden;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      box-shadow: 0 4px 18px rgba(22, 66, 53, 0.05);
+    }
+
+    .report-header {
+      position: relative;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 18px;
+      padding: 15px 18px;
+      background: #e8f3ef;
+      border-bottom: 1px solid var(--border);
+      font-weight: 700;
+    }
+
+    .report.is-collapsed .report-header { border-bottom: 0; }
+    .report.is-collapsed .category,
+    .report.is-collapsed .report-loading { display: none; }
+
+    .report-date {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      width: 100%;
+      padding-right: 160px;
+      color: var(--primary-dark);
+      font-size: 19px;
+    }
+    .report-toggle {
+      display: inline-grid;
+      flex: 0 0 30px;
+      width: 30px;
+      height: 30px;
+      padding: 0;
+      place-items: center;
+      border: 1px solid var(--primary);
+      border-radius: 50%;
+      background: #fff;
+      color: var(--primary-dark);
+      font-size: 14px;
+      cursor: pointer;
+    }
+    .report-toggle:hover { background: #d9ece6; }
+    .report-toggle:focus-visible { outline: 3px solid #55aa91; outline-offset: 2px; }
+    .report-meta {
+      font-family: inherit;
+      font-size: 15px;
+      font-weight: 700;
+      line-height: 1.4;
+    }
+    .work-type { color: var(--primary-dark); }
+    .report-actions {
+      position: absolute;
+      top: 12px;
+      right: 18px;
+      display: flex;
+      gap: 8px;
+    }
+
+    .report-actions .report-button {
+      min-height: 38px;
+      padding: 7px 11px;
+      font-size: 13px;
+    }
+
+    .delete-button {
+      background: #b42318;
+    }
+
+    .delete-button:hover {
+      background: #851b13;
+    }
+    .category { padding: 16px 18px; border-bottom: 1px solid #edf1f0; }
+    .category:last-child { border-bottom: 0; }
+    .category-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    .category h3 { margin: 0; font-size: 16px; }
+    .category-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
+    .category-button {
+      min-height: 34px;
+      padding: 6px 10px;
+      border: 1px solid var(--primary);
+      border-radius: 7px;
+      background: #fff;
+      color: var(--primary);
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .category-button:disabled { opacity: 0.55; cursor: not-allowed; }
+    .category-button.danger { border-color: #b42318; color: #b42318; }
+    .category-button.primary-danger { border-color: #b42318; background: #b42318; color: #fff; }
+    .hidden-file-input { display: none; }
+    .selection-locked-link { pointer-events: none; opacity: 0.45; }
+
+    .photo-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+      gap: 10px;
+    }
+
+    .photo-button {
+      position: relative;
+      aspect-ratio: 1;
+      overflow: hidden;
+      padding: 0;
+      border: 0;
+      border-radius: 9px;
+      background: #e5ebe9;
+      cursor: zoom-in;
+    }
+
+    .photo-button img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .photo-button:focus-visible { outline: 4px solid #55aa91; outline-offset: 2px; }
+
+    @media (min-width: 721px) {
+      .photo-button img { object-fit: contain; }
+    }
+
+    .photo-card { position: relative; min-width: 0; }
+    .photo-card .photo-button { width: 100%; display: block; }
+    .photo-checkbox {
+      position: absolute;
+      top: 7px;
+      right: 7px;
+      z-index: 2;
+      display: none;
+      width: 26px;
+      height: 26px;
+      margin: 0;
+      accent-color: #b42318;
+      pointer-events: none;
+      filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5));
+    }
+    .selection-mode .photo-checkbox { display: block; }
+    .selection-mode .photo-button { cursor: pointer; }
+    .photo-card.selected .photo-button { outline: 4px solid #b42318; outline-offset: -4px; }
+
+    .state {
+      padding: 60px 20px;
+      color: var(--muted);
+      text-align: center;
+      font-size: 17px;
+    }
+
+    .error { color: #a52828; }
+
+    dialog {
+      width: min(1200px, calc(100% - 24px));
+      height: calc(100vh - 24px);
+      height: calc(100dvh - 24px);
+      max-height: none;
+      padding: 0;
+      overflow: hidden;
+      border: 0;
+      border-radius: 14px;
+      background: #111;
+      color: #fff;
+    }
+
+    dialog[open] {
+      display: flex;
+      flex-direction: column;
+    }
+
+    dialog::backdrop { background: rgba(0, 0, 0, 0.82); }
+
+    .modal-toolbar {
+      position: relative;
+      z-index: 10;
+      display: flex;
+      flex: 0 0 auto;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 10px 12px;
+      background: #202020;
+    }
+
+    .modal-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .modal-actions { display: flex; flex: 0 0 auto; align-items: center; gap: 14px; }
+    .download-button { color: #86dfc2; }
+    .modal-counter { min-width: 3.5em; color: #ddd; text-align: center; }
+    .zoom-controls { display: flex; align-items: center; gap: 5px; }
+    .zoom-button {
+      min-width: 40px;
+      height: 36px;
+      padding: 0 6px;
+      border: 1px solid #666;
+      border-radius: 8px;
+      background: #383838;
+      color: #fff;
+      font: inherit;
+      font-size: 16px;
+      cursor: pointer;
+    }
+    .zoom-button:hover { background: #505050; }
+    .zoom-button:focus-visible { outline: 3px solid #86dfc2; outline-offset: 2px; }
+    .zoom-button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .close-button {
+      width: 40px;
+      height: 40px;
+      border: 0;
+      border-radius: 50%;
+      background: #444;
+      color: #fff;
+      font-size: 24px;
+      cursor: pointer;
+    }
+
+    .modal-image-wrap {
+      position: relative;
+      display: grid;
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow: hidden;
+      place-items: center;
+      touch-action: pan-y;
+    }
+
+    #modalImage {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      min-width: 0;
+      min-height: 0;
+      display: block;
+      object-fit: contain;
+      transform-origin: center;
+      user-select: none;
+      -webkit-user-drag: none;
+    }
+    #modalImage.is-zoomed { cursor: grab; touch-action: none; }
+    #modalImage.is-dragging { cursor: grabbing; }
+
+    .modal-nav {
+      position: absolute;
+      z-index: 2;
+      top: 50%;
+      width: 52px;
+      height: 64px;
+      padding: 0;
+      transform: translateY(-50%);
+      border: 0;
+      border-radius: 10px;
+      background: rgba(0, 0, 0, 0.55);
+      color: #fff;
+      font-size: 42px;
+      line-height: 1;
+      cursor: pointer;
+    }
+    .modal-nav:hover { background: rgba(0, 0, 0, 0.75); }
+    .modal-nav:focus-visible { outline: 3px solid #86dfc2; outline-offset: 2px; }
+    .modal-nav:disabled { display: none; }
+    .modal-nav.previous { left: 10px; }
+    .modal-nav.next { right: 10px; }
+
+    @media (max-width: 720px) {
+      .filters { grid-template-columns: 1fr 1fr; }
+      .photo-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+      .category { padding: 14px 12px; }
+      .category-header { align-items: flex-start; flex-direction: column; }
+      .category-actions { width: 100%; justify-content: flex-start; }
+      .report-header { padding: 13px 12px; }
+      .report-date { padding-right: 145px; }
+      .report-actions { top: 9px; right: 12px; gap: 5px; }
+      .report-actions .report-button { padding: 7px 8px; font-size: 12px; }
+      .modal-title { display: none; }
+      .modal-toolbar { justify-content: flex-end; }
+      .modal-actions { gap: 7px; }
+      .zoom-button { min-width: 36px; padding: 0 4px; font-size: 14px; }
+      .modal-counter { min-width: 3em; font-size: 14px; }
+      .modal-nav { width: 46px; height: 58px; }
+    }
+
+    @media (max-width: 440px) {
+      .filters { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 380px) {
+      .report-date { padding-right: 0; }
+      .report-actions {
+        position: static;
+        width: 100%;
+        justify-content: flex-end;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="header-row">
+      <h1>📷 清掃写真一覧</h1>
+      <nav class="header-links" aria-label="ページ操作">
+        <a class="back-link" href="index.html">アップロードへ</a>
+        <a class="back-link logout-link" href="/logout">ログアウト</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <section class="filters" aria-label="写真の検索条件">
+      <div class="field">
+        <label for="dateFilter">清掃日</label>
+        <input type="date" id="dateFilter">
+      </div>
+      <div class="field">
+        <label for="siteFilter">現場</label>
+        <select id="siteFilter"><option value="">すべての現場</option></select>
+      </div>
+      <div class="field">
+        <label for="staffFilter">担当者</label>
+        <select id="staffFilter"><option value="">すべての担当者</option></select>
+      </div>
+    </section>
+
+    <p id="summary" class="summary" aria-live="polite"></p>
+    <div id="reports"><div class="state">写真を読み込んでいます…</div></div>
+  </main>
+
+  <dialog id="photoModal">
+    <div class="modal-toolbar">
+      <div id="modalTitle" class="modal-title"></div>
+      <div class="modal-actions">
+        <div class="zoom-controls" aria-label="写真の拡大縮小">
+          <button id="zoomIn" class="zoom-button" type="button" aria-label="写真を拡大">🔍＋</button>
+          <button id="zoomOut" class="zoom-button" type="button" aria-label="写真を縮小">🔍－</button>
+          <button id="resetZoom" class="zoom-button" type="button" aria-label="写真を元の大きさに戻す">↺</button>
+        </div>
+        <span id="modalCounter" class="modal-counter" aria-live="polite"></span>
+        <a id="downloadLink" class="download-button" href="#">ダウンロード</a>
+        <button id="closeModal" class="close-button" type="button" aria-label="閉じる">×</button>
+      </div>
+    </div>
+    <div id="modalImageWrap" class="modal-image-wrap">
+      <button id="previousPhoto" class="modal-nav previous" type="button" aria-label="前の写真">‹</button>
+      <img id="modalImage" alt="拡大写真">
+      <button id="nextPhoto" class="modal-nav next" type="button" aria-label="次の写真">›</button>
+    </div>
+  </dialog>
+
+  <script src="session.js"></script>
+  <script>
+    const CATEGORY_LABELS = {
+      photos_amenity: "タオル・アメニティ・Wi-Fi・Netflix",
+      photos_general: "その他全般",
+      photos_kitchen: "キッチン",
+      photos_bath: "お風呂・洗面・トイレ",
+      photos_living: "リビング",
+      photos_bedroom: "寝室",
+      photos_hallway: "廊下",
+      photos_equipment: "エアコン・照明・Wi-Fi・鍵",
+      photos_others: "物件指定の清掃",
+      regular_1: "定期清掃：リビング・共用スペース",
+      regular_2: "定期清掃：寝室まわり",
+      regular_3: "定期清掃：キッチン・ダイニング",
+      regular_4: "定期清掃：浴室・洗面・トイレ",
+      regular_5: "定期清掃：窓・建具",
+      regular_6: "定期清掃：屋外・外周",
+      regular_7: "定期清掃：場所横断",
+      regular_8: "定期清掃：物件指定・その他",
+      photos_filter: "フィルター清掃"
+    };
+
+    const CATEGORY_ORDER = Object.keys(CATEGORY_LABELS);
+    const reportsEl = document.getElementById("reports");
+    const summaryEl = document.getElementById("summary");
+    const dateFilter = document.getElementById("dateFilter");
+    const siteFilter = document.getElementById("siteFilter");
+    const staffFilter = document.getElementById("staffFilter");
+    const modal = document.getElementById("photoModal");
+    const modalImage = document.getElementById("modalImage");
+    const modalTitle = document.getElementById("modalTitle");
+    const modalCounter = document.getElementById("modalCounter");
+    const modalImageWrap = document.getElementById("modalImageWrap");
+    const previousPhotoButton = document.getElementById("previousPhoto");
+    const nextPhotoButton = document.getElementById("nextPhoto");
+    const zoomInButton = document.getElementById("zoomIn");
+    const zoomOutButton = document.getElementById("zoomOut");
+    const resetZoomButton = document.getElementById("resetZoom");
+    const downloadLink = document.getElementById("downloadLink");
+    let allPhotos = [];
+    let allReports = [];
+    let modalPhotos = [];
+    let modalPhotoIndex = -1;
+    let zoomScale = 1;
+    let panX = 0;
+    let panY = 0;
+    let dragStart = null;
+
+    const openedAt = new Date();
+    const localToday = [
+      openedAt.getFullYear(),
+      String(openedAt.getMonth() + 1).padStart(2, "0"),
+      String(openedAt.getDate()).padStart(2, "0")
+    ].join("-");
+    const requestedDate = new URLSearchParams(location.search).get("date") || "";
+    const rememberedDate = localStorage.getItem("lastUploadedReportDate") || "";
+    dateFilter.value = /^\d{4}-\d{2}-\d{2}$/.test(requestedDate)
+      ? requestedDate
+      : /^\d{4}-\d{2}-\d{2}$/.test(rememberedDate)
+        ? rememberedDate
+        : localToday;
+
+    function categoryLabel(photoId) {
+      return CATEGORY_LABELS[photoId] || photoId || "その他";
+    }
+
+    function addSelectOptions(select, values) {
+      [...new Set(values.filter(Boolean))]
+        .sort((a, b) => a.localeCompare(b, "ja", { numeric: true }))
+        .forEach(value => select.add(new Option(value, value)));
+    }
+
+    function matchesFilters(report) {
+      return (!dateFilter.value || report.date === dateFilter.value) &&
+        (!siteFilter.value || report.site === siteFilter.value) &&
+        (!staffFilter.value || report.staff === staffFilter.value);
+    }
+
+    function photoScope(photo) {
+      return photo.photoId.startsWith("regular_") || photo.photoId === "photos_filter"
+        ? "special"
+        : "normal";
+    }
+
+    function groupPhotos(photos) {
+      const reports = new Map();
+      photos.forEach(photo => {
+        const scope = photoScope(photo);
+        const reportKey = `${photo.date}\u0000${photo.site}\u0000${photo.staff}\u0000${scope}`;
+        if (!reports.has(reportKey)) {
+          reports.set(reportKey, {
+            date: photo.date,
+            site: photo.site,
+            staff: photo.staff,
+            scope,
+            categories: new Map()
+          });
+        }
+        const report = reports.get(reportKey);
+        if (!report.categories.has(photo.photoId)) report.categories.set(photo.photoId, []);
+        report.categories.get(photo.photoId).push(photo);
+      });
+      return [...reports.values()];
+    }
+
+    function workTypeLabel(report) {
+      if (report.scope === "normal") return "🧹通常清掃";
+
+      const categoryIds = report.categories
+        ? [...report.categories.keys()]
+        : report.photoIds || [];
+      const hasRegular = categoryIds.some(id => id.startsWith("regular_"));
+      const hasFilter = categoryIds.includes("photos_filter");
+      const filterPhotos = report.categories?.get("photos_filter") || [];
+      const timeMatch = filterPhotos
+        .map(photo => photo.filename?.match(/_(\d+)min\.jpg$/i))
+        .find(Boolean);
+      const filterMinutes = timeMatch?.[1] || report.filterMinutes;
+      const filterLabel = filterMinutes
+        ? `🌬️フィルター清掃（${filterMinutes}分）`
+        : "🌬️フィルター清掃";
+
+      if (hasRegular && hasFilter) return `✨定期清掃＋${filterLabel}`;
+      if (hasRegular) return "✨定期清掃のみ";
+      if (hasFilter) return `${filterLabel}のみ`;
+      return "🧹通常清掃のみ";
+    }
+
+    function downloadUrl({ date, site = "", staff = "", scope = "" }) {
+      const params = new URLSearchParams({ date });
+      if (site) params.set("site", site);
+      if (staff) params.set("staff", staff);
+      if (scope) params.set("scope", scope);
+      return `/api/photos/download?${params}`;
+    }
+
+    function startZipDownload(filters) {
+      window.location.href = downloadUrl(filters);
+    }
+
+    async function deleteReport(report, button) {
+      const confirmation = prompt(
+        `${report.date} / ${report.site} / ${report.staff}\n` +
+        "この報告の写真をすべて削除します。元に戻せません。\n\n" +
+        "実行する場合は「削除」と入力してください。"
+      );
+
+      if (confirmation === null) return;
+      if (confirmation !== "削除") {
+        alert("削除を中止しました。確認欄には「削除」と入力してください。");
+        return;
+      }
+
+      button.disabled = true;
+      button.textContent = "削除中…";
+
+      try {
+        const response = await fetch("/api/photos/report", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            date: report.date,
+            site: report.site,
+            staff: report.staff,
+            scope: report.scope,
+            confirmation
+          })
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || "削除に失敗しました");
+
+        allPhotos = allPhotos.filter(photo => !(
+          photo.date === report.date &&
+          photo.site === report.site &&
+          photo.staff === report.staff &&
+          photoScope(photo) === report.scope
+        ));
+        allReports = allReports.filter(item => !(
+          item.date === report.date &&
+          item.site === report.site &&
+          item.staff === report.staff &&
+          item.scope === report.scope
+        ));
+        render();
+        alert(`${result.deletedCount}枚の写真を削除しました。`);
+      } catch (error) {
+        console.error(error);
+        alert(error.message);
+        button.disabled = false;
+        button.textContent = "この報告を削除";
+      }
+    }
+
+    function applyZoom() {
+      modalImage.style.transform = `translate(${panX}px, ${panY}px) scale(${zoomScale})`;
+      modalImage.classList.toggle("is-zoomed", zoomScale > 1);
+      zoomOutButton.disabled = zoomScale <= 1;
+      resetZoomButton.disabled = zoomScale <= 1;
+    }
+
+    function resetPhotoZoom() {
+      zoomScale = 1;
+      panX = 0;
+      panY = 0;
+      dragStart = null;
+      modalImage.classList.remove("is-dragging");
+      zoomInButton.disabled = false;
+      applyZoom();
+    }
+
+    function changeZoom(amount) {
+      zoomScale = Math.min(4, Math.max(1, zoomScale + amount));
+      if (zoomScale === 1) {
+        panX = 0;
+        panY = 0;
+      }
+      zoomInButton.disabled = zoomScale >= 4;
+      applyZoom();
+    }
+
+    function showModalPhoto(index) {
+      if (!modalPhotos.length) return;
+      resetPhotoZoom();
+      zoomInButton.disabled = false;
+      modalPhotoIndex = (index + modalPhotos.length) % modalPhotos.length;
+      const photo = modalPhotos[modalPhotoIndex];
+      modalImage.src = photo.url;
+      modalImage.alt = `${categoryLabel(photo.photoId)} ${modalPhotoIndex + 1}枚目`;
+      modalTitle.textContent = `${photo.date} / ${photo.site} / ${photo.staff} / ${categoryLabel(photo.photoId)}`;
+      modalCounter.textContent = `${modalPhotoIndex + 1} / ${modalPhotos.length}`;
+      downloadLink.href = photo.downloadUrl || photo.url;
+      previousPhotoButton.disabled = modalPhotos.length < 2;
+      nextPhotoButton.disabled = modalPhotos.length < 2;
+    }
+
+    function showAdjacentPhoto(offset) {
+      showModalPhoto(modalPhotoIndex + offset);
+    }
+
+    function openPhoto(photo, photos) {
+      modalPhotos = [...photos];
+      const initialIndex = modalPhotos.findIndex(item => item.key === photo.key);
+      showModalPhoto(initialIndex >= 0 ? initialIndex : 0);
+      if (!modal.open) modal.showModal();
+    }
+
+    function isHeicUpload(file) {
+      return file.type === "image/heic" ||
+        file.type === "image/heif" ||
+        /\.(heic|heif)$/i.test(file.name);
+    }
+
+    function compressPhoto(file, maxWidth = 720, quality = 0.45) {
+      return new Promise((resolve, reject) => {
+        const imageUrl = URL.createObjectURL(file);
+        const image = new Image();
+        image.onerror = () => {
+          URL.revokeObjectURL(imageUrl);
+          reject(new Error("画像を読み込めませんでした"));
+        };
+        image.onload = () => {
+          URL.revokeObjectURL(imageUrl);
+          try {
+            let { width, height } = image;
+            if (width > maxWidth) {
+              height = Math.round(height * maxWidth / width);
+              width = maxWidth;
+            }
+            const canvas = document.createElement("canvas");
+            canvas.width = width;
+            canvas.height = height;
+            canvas.getContext("2d").drawImage(image, 0, 0, width, height);
+            canvas.toBlob(
+              blob => blob ? resolve(blob) : reject(new Error("写真の圧縮に失敗しました")),
+              "image/jpeg",
+              quality
+            );
+          } catch (error) {
+            reject(error);
+          }
+        };
+        image.src = imageUrl;
+      });
+    }
+
+    async function addCategoryPhotos(report, photoId, currentPhotos, files, button) {
+      if (!files.length) return;
+      if (files.length > 30) {
+        alert("一度に追加できる写真は30枚までです。");
+        return;
+      }
+      if (files.some(isHeicUpload)) {
+        alert("HEIC形式は追加できません。iPhoneのカメラ設定を「互換性優先」にしてください。");
+        return;
+      }
+
+      const timeMatch = currentPhotos
+        .map(photo => photo.filename?.match(/_(\d+)min\.jpg$/i))
+        .find(Boolean);
+      const timeSuffix = photoId === "photos_filter" && timeMatch
+        ? `_${timeMatch[1]}min`
+        : "";
+      const timestamp = Date.now();
+      const additions = files.map((file, index) => ({
+        file,
+        filename: `add_${timestamp}_${String(index + 1).padStart(3, "0")}${timeSuffix}.jpg`
+      }));
+
+      button.disabled = true;
+      button.textContent = "準備中…";
+
+      try {
+        const tokenResponse = await fetch("/get-presigned-urls", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            date: report.date,
+            site: report.site,
+            staff: report.staff,
+            files: additions.map(item => ({
+              filename: item.filename,
+              contentType: "image/jpeg",
+              photoId
+            }))
+          })
+        });
+        if (!tokenResponse.ok) throw new Error("アップロード準備に失敗しました");
+        const targets = await tokenResponse.json();
+        additions.forEach((item, index) => Object.assign(item, targets[index]));
+
+        let nextIndex = 0;
+        let completed = 0;
+        async function worker() {
+          while (nextIndex < additions.length) {
+            const item = additions[nextIndex++];
+            const blob = await compressPhoto(item.file);
+            const response = await fetch(item.uploadUrl, {
+              method: "PUT",
+              headers: { "Content-Type": "image/jpeg" },
+              body: blob
+            });
+            if (!response.ok) throw new Error("S3への写真追加に失敗しました");
+            completed += 1;
+            button.textContent = `追加中 ${completed}/${additions.length}`;
+          }
+        }
+
+        await Promise.all(
+          Array.from({ length: Math.min(4, additions.length) }, () => worker())
+        );
+        alert(`${additions.length}枚の写真を追加しました。`);
+        await loadPhotos();
+      } catch (error) {
+        console.error(error);
+        alert(error.message);
+        button.disabled = false;
+        button.textContent = "写真を追加";
+      }
+    }
+
+    async function deleteSelectedPhotos(keys, button, releaseLock) {
+      if (!keys.length) return;
+      if (!confirm(`選択した${keys.length}枚を削除します。元に戻せません。`)) return;
+
+      button.disabled = true;
+      button.textContent = "削除中…";
+      try {
+        const response = await fetch("/api/photos", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ keys, confirmation: "削除" })
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || "写真の削除に失敗しました");
+        const deletedKeys = new Set(keys);
+        allPhotos = allPhotos.filter(photo => !deletedKeys.has(photo.key));
+        releaseLock();
+        await loadPhotos();
+        alert(`${result.deletedCount}枚の写真を削除しました。`);
+      } catch (error) {
+        console.error(error);
+        alert(error.message);
+        button.disabled = false;
+        button.textContent = `選択した写真を削除（${keys.length}枚）`;
+      }
+    }
+
+    function createCategory(report, photoId, photos) {
+      const section = document.createElement("section");
+      section.className = "category";
+
+      const categoryHeader = document.createElement("div");
+      categoryHeader.className = "category-header";
+
+      const heading = document.createElement("h3");
+      heading.textContent = `【${categoryLabel(photoId)}（${photos.length}枚）】`;
+
+      const actions = document.createElement("div");
+      actions.className = "category-actions";
+      const addButton = document.createElement("button");
+      addButton.className = "category-button";
+      addButton.type = "button";
+      addButton.textContent = "写真を追加";
+      const fileInput = document.createElement("input");
+      fileInput.className = "hidden-file-input";
+      fileInput.type = "file";
+      fileInput.accept = "image/jpeg,.jpg,.jpeg";
+      fileInput.multiple = true;
+      addButton.addEventListener("click", () => fileInput.click());
+      fileInput.addEventListener("change", async () => {
+        const files = Array.from(fileInput.files || []);
+        fileInput.value = "";
+        await addCategoryPhotos(report, photoId, photos, files, addButton);
+      });
+
+      const selectButton = document.createElement("button");
+      selectButton.className = "category-button danger";
+      selectButton.type = "button";
+      selectButton.textContent = "選択して削除";
+      const deleteButton = document.createElement("button");
+      deleteButton.className = "category-button primary-danger";
+      deleteButton.type = "button";
+      deleteButton.hidden = true;
+      deleteButton.disabled = true;
+      deleteButton.textContent = "選択した写真を削除";
+      const selectedKeys = new Set();
+      let lockedControls = [];
+      let lockedLinks = [];
+
+      function enableSelectionLock() {
+        const allowedControls = new Set([
+          selectButton,
+          deleteButton,
+          ...section.querySelectorAll(".photo-button, .photo-checkbox")
+        ]);
+        lockedControls = [...document.querySelectorAll("button, input, select")]
+          .map(control => ({ control, disabled: control.disabled }));
+        lockedControls.forEach(({ control }) => {
+          if (!allowedControls.has(control)) control.disabled = true;
+        });
+
+        lockedLinks = [...document.querySelectorAll("a")];
+        lockedLinks.forEach(link => {
+          link.classList.add("selection-locked-link");
+          link.setAttribute("aria-disabled", "true");
+        });
+      }
+
+      function releaseSelectionLock() {
+        lockedControls.forEach(({ control, disabled }) => {
+          if (control.isConnected) control.disabled = disabled;
+        });
+        lockedControls = [];
+        lockedLinks.forEach(link => {
+          if (link.isConnected) {
+            link.classList.remove("selection-locked-link");
+            link.removeAttribute("aria-disabled");
+          }
+        });
+        lockedLinks = [];
+      }
+
+      function updateSelection() {
+        deleteButton.disabled = selectedKeys.size === 0;
+        deleteButton.textContent = selectedKeys.size
+          ? `選択した写真を削除（${selectedKeys.size}枚）`
+          : "選択した写真を削除";
+      }
+
+      selectButton.addEventListener("click", () => {
+        const active = section.classList.toggle("selection-mode");
+        selectButton.textContent = active ? "選択を終了" : "選択して削除";
+        deleteButton.hidden = !active;
+        if (active) {
+          enableSelectionLock();
+        } else {
+          releaseSelectionLock();
+          selectedKeys.clear();
+          section.querySelectorAll(".photo-card").forEach(card => {
+            card.classList.remove("selected");
+            card.querySelector(".photo-checkbox").checked = false;
+          });
+          updateSelection();
+        }
+      });
+      deleteButton.addEventListener("click", () =>
+        deleteSelectedPhotos([...selectedKeys], deleteButton, releaseSelectionLock)
+      );
+
+      actions.append(addButton, selectButton, deleteButton, fileInput);
+      categoryHeader.append(heading, actions);
+      section.appendChild(categoryHeader);
+
+      const grid = document.createElement("div");
+      grid.className = "photo-grid";
+      photos.forEach((photo, index) => {
+        const card = document.createElement("div");
+        card.className = "photo-card";
+        const button = document.createElement("button");
+        button.className = "photo-button";
+        button.type = "button";
+        button.setAttribute("aria-label", `${categoryLabel(photoId)} ${index + 1}枚目を拡大`);
+        const checkbox = document.createElement("input");
+        checkbox.className = "photo-checkbox";
+        checkbox.type = "checkbox";
+        checkbox.tabIndex = -1;
+        button.addEventListener("click", () => {
+          if (!section.classList.contains("selection-mode")) {
+            openPhoto(photo, photos);
+            return;
+          }
+          checkbox.checked = !checkbox.checked;
+          card.classList.toggle("selected", checkbox.checked);
+          if (checkbox.checked) selectedKeys.add(photo.key);
+          else selectedKeys.delete(photo.key);
+          updateSelection();
+        });
+
+        const image = document.createElement("img");
+        image.src = photo.url;
+        image.alt = `${categoryLabel(photoId)} ${index + 1}枚目`;
+        image.loading = "lazy";
+        image.decoding = "async";
+        button.appendChild(image);
+        card.append(button, checkbox);
+        grid.appendChild(card);
+      });
+      section.appendChild(grid);
+      return section;
+    }
+
+    function renderReportCategories(article, report) {
+      article.querySelectorAll(".category, .report-loading").forEach(element => element.remove());
+      [...report.categories.entries()]
+        .sort(([a], [b]) => {
+          const ai = CATEGORY_ORDER.indexOf(a);
+          const bi = CATEGORY_ORDER.indexOf(b);
+          return (ai < 0 ? 999 : ai) - (bi < 0 ? 999 : bi);
+        })
+        .forEach(([photoId, photos]) =>
+          article.appendChild(createCategory(report, photoId, photos))
+        );
+    }
+
+    async function loadReportPhotos(article, report) {
+      if (report.categories) {
+        renderReportCategories(article, report);
+        return;
+      }
+
+      const loading = document.createElement("div");
+      loading.className = "state report-loading";
+      loading.textContent = "写真を読み込んでいます…";
+      article.appendChild(loading);
+      try {
+        const params = new URLSearchParams({
+          date: report.date,
+          site: report.site,
+          staff: report.staff,
+          scope: report.scope,
+        });
+        const response = await fetch(`/api/photos?${params}`, { cache: "no-store" });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const photos = await response.json();
+        const loadedReport = groupPhotos(photos)[0];
+        report.categories = loadedReport?.categories || new Map();
+        allPhotos = allPhotos.filter(photo => !(
+          photo.date === report.date &&
+          photo.site === report.site &&
+          photo.staff === report.staff &&
+          photoScope(photo) === report.scope
+        ));
+        allPhotos.push(...photos);
+        renderReportCategories(article, report);
+      } catch (error) {
+        console.error(error);
+        loading.className = "state error report-loading";
+        loading.textContent = "写真を読み込めませんでした。もう一度開き直してください。";
+      }
+    }
+
+    function render() {
+      const reports = allReports.filter(matchesFilters);
+      reportsEl.replaceChildren();
+      summaryEl.textContent = `${reports.length}件の清掃報告`;
+
+      if (!reports.length) {
+        const empty = document.createElement("div");
+        empty.className = "state";
+        empty.textContent = "条件に一致する写真がありません。";
+        reportsEl.appendChild(empty);
+        return;
+      }
+
+      reports.forEach(report => {
+        const article = document.createElement("article");
+        article.className = "report is-collapsed";
+
+        const heading = document.createElement("div");
+        heading.className = "report-header";
+        const date = document.createElement("div");
+        date.className = "report-date";
+        const reportToggle = document.createElement("button");
+        reportToggle.className = "report-toggle";
+        reportToggle.type = "button";
+        reportToggle.textContent = "▼";
+        reportToggle.setAttribute("aria-expanded", "false");
+        const [year, month, day] = report.date.split("-").map(Number);
+        const shortDate = `${String(year).slice(-2)}/${month}/${day}`;
+        reportToggle.setAttribute("aria-label", `${shortDate}の写真一覧を表示`);
+        reportToggle.addEventListener("click", async () => {
+          const isCollapsed = article.classList.toggle("is-collapsed");
+          reportToggle.textContent = isCollapsed ? "▼" : "▲";
+          reportToggle.setAttribute("aria-expanded", String(!isCollapsed));
+          reportToggle.setAttribute(
+            "aria-label",
+            `${shortDate}の写真一覧を${isCollapsed ? "表示" : "閉じる"}`
+          );
+          if (!isCollapsed) await loadReportPhotos(article, report);
+        });
+        date.append(reportToggle, document.createTextNode(shortDate));
+        const site = document.createElement("span");
+        site.className = "report-meta";
+        site.textContent = `🏠 ${report.site}`;
+        const workType = document.createElement("span");
+        workType.className = "report-meta work-type";
+        workType.textContent = workTypeLabel(report);
+        const staff = document.createElement("span");
+        staff.className = "report-meta";
+        staff.textContent = `👤 ${report.staff}`;
+        const reportDownload = document.createElement("button");
+        reportDownload.className = "report-button";
+        reportDownload.type = "button";
+        reportDownload.textContent = "ZIP保存";
+        reportDownload.addEventListener("click", () => startZipDownload(report));
+        const reportDelete = document.createElement("button");
+        reportDelete.className = "report-button delete-button";
+        reportDelete.type = "button";
+        reportDelete.textContent = "削除";
+        reportDelete.addEventListener("click", () => deleteReport(report, reportDelete));
+        const reportActions = document.createElement("div");
+        reportActions.className = "report-actions";
+        reportActions.append(reportDownload, reportDelete);
+        heading.append(date, site, workType, staff, reportActions);
+        article.appendChild(heading);
+
+        reportsEl.appendChild(article);
+      });
+    }
+
+    async function loadPhotos() {
+      try {
+        reportsEl.innerHTML = '<div class="state">写真を読み込んでいます…</div>';
+        const params = new URLSearchParams();
+        if (dateFilter.value) params.set("date", dateFilter.value);
+        const response = await fetch(`/api/reports?${params}`, { cache: "no-store" });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        allReports = await response.json();
+        allPhotos = [];
+        const selectedSite = siteFilter.value;
+        const selectedStaff = staffFilter.value;
+        siteFilter.replaceChildren(new Option("すべての現場", ""));
+        staffFilter.replaceChildren(new Option("すべての担当者", ""));
+        addSelectOptions(siteFilter, allReports.map(report => report.site));
+        addSelectOptions(staffFilter, allReports.map(report => report.staff));
+        if ([...siteFilter.options].some(option => option.value === selectedSite)) {
+          siteFilter.value = selectedSite;
+        }
+        if ([...staffFilter.options].some(option => option.value === selectedStaff)) {
+          staffFilter.value = selectedStaff;
+        }
+        render();
+      } catch (error) {
+        console.error(error);
+        summaryEl.textContent = "";
+        reportsEl.innerHTML = '<div class="state error">写真を読み込めませんでした。サーバーを確認して再読み込みしてください。</div>';
+      }
+    }
+
+    dateFilter.addEventListener("change", () => {
+      siteFilter.value = "";
+      staffFilter.value = "";
+      loadPhotos();
+    });
+    [siteFilter, staffFilter].forEach(input => input.addEventListener("change", render));
+    document.getElementById("closeModal").addEventListener("click", () => modal.close());
+    previousPhotoButton.addEventListener("click", () => showAdjacentPhoto(-1));
+    nextPhotoButton.addEventListener("click", () => showAdjacentPhoto(1));
+    zoomInButton.addEventListener("click", () => changeZoom(0.5));
+    zoomOutButton.addEventListener("click", () => changeZoom(-0.5));
+    resetZoomButton.addEventListener("click", resetPhotoZoom);
+
+    modalImage.addEventListener("pointerdown", event => {
+      if (zoomScale <= 1) return;
+      event.preventDefault();
+      modalImage.setPointerCapture(event.pointerId);
+      dragStart = {
+        pointerX: event.clientX,
+        pointerY: event.clientY,
+        panX,
+        panY
+      };
+      modalImage.classList.add("is-dragging");
+    });
+    modalImage.addEventListener("pointermove", event => {
+      if (!dragStart) return;
+      panX = dragStart.panX + event.clientX - dragStart.pointerX;
+      panY = dragStart.panY + event.clientY - dragStart.pointerY;
+      applyZoom();
+    });
+    function stopPhotoDrag() {
+      dragStart = null;
+      modalImage.classList.remove("is-dragging");
+    }
+    modalImage.addEventListener("pointerup", stopPhotoDrag);
+    modalImage.addEventListener("pointercancel", stopPhotoDrag);
+
+    document.addEventListener("keydown", event => {
+      if (!modal.open) return;
+      if (event.key === "ArrowLeft") {
+        event.preventDefault();
+        showAdjacentPhoto(-1);
+      } else if (event.key === "ArrowRight") {
+        event.preventDefault();
+        showAdjacentPhoto(1);
+      }
+    });
+
+    let swipeStartX = null;
+    modalImageWrap.addEventListener("touchstart", event => {
+      if (zoomScale > 1) return;
+      swipeStartX = event.changedTouches[0]?.clientX ?? null;
+    }, { passive: true });
+    modalImageWrap.addEventListener("touchend", event => {
+      if (zoomScale > 1) {
+        swipeStartX = null;
+        return;
+      }
+      if (swipeStartX === null) return;
+      const endX = event.changedTouches[0]?.clientX ?? swipeStartX;
+      const distance = endX - swipeStartX;
+      swipeStartX = null;
+      if (Math.abs(distance) < 50) return;
+      showAdjacentPhoto(distance < 0 ? 1 : -1);
+    }, { passive: true });
+
+    modal.addEventListener("click", event => {
+      if (event.target === modal) modal.close();
+    });
+    modal.addEventListener("close", () => {
+      modalImage.removeAttribute("src");
+      resetPhotoZoom();
+      zoomInButton.disabled = false;
+      modalCounter.textContent = "";
+      modalPhotos = [];
+      modalPhotoIndex = -1;
+    });
+
+    loadPhotos();
+  </script>
+</body>
+</html>
