@@ -8,6 +8,7 @@
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": false,
+      "appleTeamId": "JWY5DTAPDZ",
       "bundleIdentifier": "com.tocoro.cleaning.photo-prototype",
       "infoPlist": {
         "NSPhotoLibraryUsageDescription": "清掃写真を選択してアップロードするために写真ライブラリを使用します。"
