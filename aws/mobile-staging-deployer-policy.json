@@ -15,6 +15,7 @@
         "s3:GetBucketCors",
         "s3:PutBucketCors",
         "s3:PutLifecycleConfiguration",
+        "s3:GetLifecycleConfiguration",
         "s3:GetBucketLocation",
         "s3:ListBucket"
       ],
