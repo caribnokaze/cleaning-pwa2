@@ -141,6 +141,145 @@ public final class FastPhotoPickerModule: Module {
       }
     }
 
+    AsyncFunction("prepareAndUploadPhotos") {
+      (assetIds: [String], uploadUrls: [String], maxWidth: Double,
+       jpegQuality: Double, promise: Promise) in
+      let count = min(min(assetIds.count, uploadUrls.count), 100)
+      guard count > 0 else {
+        promise.reject("ERR_EMPTY_UPLOAD", "アップロード対象がありません")
+        return
+      }
+      let identifiers = Array(assetIds.prefix(count))
+      let targets = Array(uploadUrls.prefix(count))
+      guard targets.allSatisfy({ URL(string: $0)?.scheme == "https" }) else {
+        promise.reject("ERR_INVALID_UPLOAD_URL", "アップロードURLが正しくありません")
+        return
+      }
+      let width = CGFloat(min(max(maxWidth, 1), 4096))
+      let quality = CGFloat(min(max(jpegQuality, 0), 1))
+
+      DispatchQueue.global(qos: .userInitiated).async {
+        let totalStartedAt = CFAbsoluteTimeGetCurrent()
+        let preparationStartedAt = CFAbsoluteTimeGetCurrent()
+        let temporaryDirectory = FileManager.default.temporaryDirectory
+          .appendingPathComponent("tocoro-upload-\(UUID().uuidString)", isDirectory: true)
+        do {
+          try FileManager.default.createDirectory(
+            at: temporaryDirectory,
+            withIntermediateDirectories: true
+          )
+        } catch {
+          promise.reject("ERR_TEMP_DIRECTORY", "一時ファイルを準備できません")
+          return
+        }
+
+        let assets = PHAsset.fetchAssets(withLocalIdentifiers: identifiers, options: nil)
+        var assetsById: [String: PHAsset] = [:]
+        assets.enumerateObjects { asset, _, _ in assetsById[asset.localIdentifier] = asset }
+        let prepareGroup = DispatchGroup()
+        let prepareConcurrency = DispatchSemaphore(value: 2)
+        let resultLock = NSLock()
+        var preparedFiles: [Int: (url: URL, size: Int)] = [:]
+        var firstError = ""
+
+        for (index, identifier) in identifiers.enumerated() {
+          guard let asset = assetsById[identifier] else {
+            resultLock.lock()
+            if firstError.isEmpty { firstError = "写真IDを読み込めません" }
+            resultLock.unlock()
+            continue
+          }
+          prepareGroup.enter()
+          DispatchQueue.global(qos: .userInitiated).async {
+            prepareConcurrency.wait()
+            defer { prepareConcurrency.signal(); prepareGroup.leave() }
+            autoreleasepool {
+              guard let sourceData = Self.loadLocalImageData(for: asset),
+                    let image = UIImage(data: sourceData),
+                    let jpegData = Self.resizeAndCompress(
+                      image: image,
+                      maxWidth: width,
+                      quality: quality
+                    ) else {
+                resultLock.lock()
+                if firstError.isEmpty { firstError = "端末内の写真原本を準備できません" }
+                resultLock.unlock()
+                return
+              }
+              let fileURL = temporaryDirectory.appendingPathComponent(
+                String(format: "%03d.jpg", index + 1)
+              )
+              do {
+                try jpegData.write(to: fileURL, options: .atomic)
+                resultLock.lock()
+                preparedFiles[index] = (fileURL, jpegData.count)
+                resultLock.unlock()
+              } catch {
+                resultLock.lock()
+                if firstError.isEmpty { firstError = "一時JPEGを保存できません" }
+                resultLock.unlock()
+              }
+            }
+          }
+        }
+
+        prepareGroup.wait()
+        let preparationMs = Int(
+          (CFAbsoluteTimeGetCurrent() - preparationStartedAt) * 1000
+        )
+        let uploadStartedAt = CFAbsoluteTimeGetCurrent()
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.timeoutIntervalForRequest = 60
+        configuration.timeoutIntervalForResource = 300
+        configuration.httpMaximumConnectionsPerHost = 4
+        let session = URLSession(configuration: configuration)
+        let uploadGroup = DispatchGroup()
+        var uploadedCount = 0
+        var uploadedBytes = 0
+
+        for (index, file) in preparedFiles {
+          guard let targetURL = URL(string: targets[index]) else { continue }
+          var request = URLRequest(url: targetURL)
+          request.httpMethod = "PUT"
+          request.setValue("image/jpeg", forHTTPHeaderField: "Content-Type")
+          uploadGroup.enter()
+          session.uploadTask(with: request, fromFile: file.url) { _, response, error in
+            if let httpResponse = response as? HTTPURLResponse,
+               (200..<300).contains(httpResponse.statusCode) {
+              resultLock.lock()
+              uploadedCount += 1
+              uploadedBytes += file.size
+              resultLock.unlock()
+            } else {
+              let detail = (error as NSError?).map {
+                "\($0.domain) \($0.code): \($0.localizedDescription)"
+              } ?? "アップロード応答がありません"
+              resultLock.lock()
+              if firstError.isEmpty { firstError = detail }
+              resultLock.unlock()
+            }
+            uploadGroup.leave()
+          }.resume()
+        }
+
+        uploadGroup.notify(queue: .main) {
+          session.finishTasksAndInvalidate()
+          try? FileManager.default.removeItem(at: temporaryDirectory)
+          let uploadMs = Int((CFAbsoluteTimeGetCurrent() - uploadStartedAt) * 1000)
+          promise.resolve([
+            "requestedCount": count,
+            "uploadedCount": uploadedCount,
+            "failedCount": count - uploadedCount,
+            "preparationMs": preparationMs,
+            "uploadMs": uploadMs,
+            "totalMs": Int((CFAbsoluteTimeGetCurrent() - totalStartedAt) * 1000),
+            "uploadedBytes": uploadedBytes,
+            "firstError": firstError,
+          ])
+        }
+      }
+    }
+
   }
 
   private static func loadLocalImageData(for asset: PHAsset) -> Data? {

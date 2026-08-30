@@ -1,21 +1,40 @@
 import { StatusBar } from "expo-status-bar";
 import { useState } from "react";
-import { Platform, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from "react-native";
+import {
+  Platform,
+  Pressable,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 import FastPhotoPicker, {
   PhotoPreparationResult,
   PhotoPickerResult,
+  PhotoUploadResult,
 } from "./modules/fast-photo-picker/src";
+
+const STAGING_API_URL =
+  "https://biosdhdwobbnfvv4i2xbrw2vfm0kstgg.lambda-url.ap-northeast-1.on.aws";
+
+type StagingUploadResult = PhotoUploadResult & { deletedCount: number };
 
 export default function App() {
   const [result, setResult] = useState<PhotoPickerResult | null>(null);
   const [pickerName, setPickerName] = useState("");
   const [preparation, setPreparation] = useState<PhotoPreparationResult | null>(null);
   const [isPreparing, setIsPreparing] = useState(false);
+  const [stagingPassword, setStagingPassword] = useState("");
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadResult, setUploadResult] = useState<StagingUploadResult | null>(null);
   const [error, setError] = useState("");
 
   const openPicker = async (useSystemPicker: boolean) => {
     setError("");
     setPreparation(null);
+    setUploadResult(null);
     if (Platform.OS !== "ios" || !FastPhotoPicker) {
       setError("この試作版の高速写真選択はiPhone実機用です。");
       return;
@@ -55,6 +74,67 @@ export default function App() {
   };
 
   const megabytes = (bytes: number) => (bytes / 1024 / 1024).toFixed(1);
+
+  const uploadToStaging = async () => {
+    if (!result || !stagingPassword || isUploading || !FastPhotoPicker) return;
+    setError("");
+    setUploadResult(null);
+    setIsUploading(true);
+    const runId = `ios-${Date.now()}`;
+    let token = "";
+    try {
+      const loginResponse = await fetch(`${STAGING_API_URL}/api/mobile/login`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ password: stagingPassword }),
+      });
+      const loginBody = await loginResponse.json();
+      if (!loginResponse.ok || !loginBody.token) {
+        throw new Error(loginBody.error || "検証環境へログインできませんでした");
+      }
+      token = loginBody.token;
+
+      const files = result.assetIds.map((_, index) => ({
+        filename: `${String(index + 1).padStart(3, "0")}.jpg`,
+      }));
+      const signedResponse = await fetch(
+        `${STAGING_API_URL}/api/mobile-test/presigned-urls`,
+        {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${token}`,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({ runId, files }),
+        },
+      );
+      const signedBody = await signedResponse.json();
+      if (!signedResponse.ok || !Array.isArray(signedBody)) {
+        throw new Error(signedBody.error || "アップロードURLを取得できませんでした");
+      }
+
+      const nativeResult = await FastPhotoPicker.prepareAndUploadPhotos(
+        result.assetIds,
+        signedBody.map((target: { uploadUrl: string }) => target.uploadUrl),
+        720,
+        0.45,
+      );
+
+      const deleteResponse = await fetch(
+        `${STAGING_API_URL}/api/mobile-test/runs/${runId}`,
+        { method: "DELETE", headers: { authorization: `Bearer ${token}` } },
+      );
+      const deleteBody = await deleteResponse.json();
+      if (!deleteResponse.ok) {
+        throw new Error(deleteBody.error || "検証写真を削除できませんでした");
+      }
+      setUploadResult({ ...nativeResult, deletedCount: deleteBody.deletedCount });
+    } catch (uploadError) {
+      setError(uploadError instanceof Error ? uploadError.message : String(uploadError));
+    } finally {
+      setIsUploading(false);
+    }
+  };
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -114,6 +194,43 @@ export default function App() {
                   幅720px・JPEG品質45%・同時処理2枚。現場で撮影して端末に
                   保存された原本のみを処理し、iCloud取得や外部送信は行いません。
                 </Text>
+                <TextInput
+                  style={styles.passwordInput}
+                  value={stagingPassword}
+                  onChangeText={setStagingPassword}
+                  placeholder="検証環境のパスワード"
+                  secureTextEntry
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  editable={!isUploading}
+                />
+                <Pressable
+                  style={[styles.button, styles.benchmarkButton, isUploading && styles.disabledButton]}
+                  onPress={uploadToStaging}
+                  disabled={isUploading || !stagingPassword || result.assetIds.length === 0}
+                >
+                  <Text style={styles.buttonText}>
+                    {isUploading ? "検証S3へ送信・削除中…" : "検証S3へ実送信して計測"}
+                  </Text>
+                </Pressable>
+                {uploadResult && (
+                  <View style={styles.preparationResult}>
+                    <Text style={styles.resultTitle}>検証S3送信結果</Text>
+                    <Text style={styles.metric}>準備：{uploadResult.preparationMs}ms</Text>
+                    <Text style={styles.metric}>送信：{uploadResult.uploadMs}ms</Text>
+                    <Text style={styles.metric}>合計：{uploadResult.totalMs}ms</Text>
+                    <Text style={styles.metric}>
+                      成功：{uploadResult.uploadedCount}枚／失敗：{uploadResult.failedCount}枚
+                    </Text>
+                    <Text style={styles.metric}>
+                      送信容量：{megabytes(uploadResult.uploadedBytes)}MB
+                    </Text>
+                    <Text style={styles.metric}>検証S3から削除：{uploadResult.deletedCount}枚</Text>
+                    {!!uploadResult.firstError && (
+                      <Text style={styles.error}>{uploadResult.firstError}</Text>
+                    )}
+                  </View>
+                )}
               </View>
             )}
           </View>
@@ -140,5 +257,15 @@ const styles = StyleSheet.create({
   benchmarkButton: { marginTop: 16 },
   disabledButton: { opacity: 0.55 },
   preparationResult: { marginTop: 18, paddingTop: 16, borderTopWidth: 1, borderTopColor: "#dce4e1" },
+  passwordInput: {
+    marginTop: 16,
+    borderWidth: 1,
+    borderColor: "#aebcb7",
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 13,
+    fontSize: 16,
+    backgroundColor: "#fff",
+  },
   error: { marginTop: 20, color: "#b42318", fontSize: 15 },
 });

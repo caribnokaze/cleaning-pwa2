@@ -14,6 +14,17 @@ export type PhotoPreparationResult = {
   outputBytes: number;
 };
 
+export type PhotoUploadResult = {
+  requestedCount: number;
+  uploadedCount: number;
+  failedCount: number;
+  preparationMs: number;
+  uploadMs: number;
+  totalMs: number;
+  uploadedBytes: number;
+  firstError: string;
+};
+
 type FastPhotoPickerModule = {
   pickPhotos(limit: number): Promise<PhotoPickerResult>;
   pickPhotosWithSystemPicker(limit: number): Promise<PhotoPickerResult>;
@@ -22,6 +33,12 @@ type FastPhotoPickerModule = {
     maxWidth: number,
     jpegQuality: number,
   ): Promise<PhotoPreparationResult>;
+  prepareAndUploadPhotos(
+    assetIds: string[],
+    uploadUrls: string[],
+    maxWidth: number,
+    jpegQuality: number,
+  ): Promise<PhotoUploadResult>;
 };
 
 export default requireOptionalNativeModule<FastPhotoPickerModule>(

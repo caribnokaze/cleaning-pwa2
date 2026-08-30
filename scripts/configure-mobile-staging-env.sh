@@ -10,6 +10,15 @@ if [ "${#app_password}" -lt 8 ]; then
   echo "パスワードは8文字以上にしてください。" >&2
   exit 1
 fi
+printf "確認のため、同じパスワードをもう一度入力: "
+IFS= read -r -s app_password_confirmation
+printf "\n"
+if [ "$app_password" != "$app_password_confirmation" ]; then
+  unset app_password app_password_confirmation
+  echo "2回のパスワードが一致しません。もう一度実行してください。" >&2
+  exit 1
+fi
+unset app_password_confirmation
 
 auth_secret="$(openssl rand -hex 32)"
 umask 077
