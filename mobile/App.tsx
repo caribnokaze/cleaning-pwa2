@@ -28,6 +28,7 @@ export default function App() {
   const [isPreparing, setIsPreparing] = useState(false);
   const [stagingPassword, setStagingPassword] = useState("");
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadPhase, setUploadPhase] = useState("");
   const [uploadResult, setUploadResult] = useState<StagingUploadResult | null>(null);
   const [error, setError] = useState("");
 
@@ -35,6 +36,7 @@ export default function App() {
     setError("");
     setPreparation(null);
     setUploadResult(null);
+    setUploadPhase("");
     if (Platform.OS !== "ios" || !FastPhotoPicker) {
       setError("この試作版の高速写真選択はiPhone実機用です。");
       return;
@@ -80,8 +82,11 @@ export default function App() {
     setError("");
     setUploadResult(null);
     setIsUploading(true);
+    setUploadPhase("検証環境へログイン中…");
     const runId = `ios-${Date.now()}`;
     let token = "";
+    let cleanupCompleted = false;
+    let nativeResult: PhotoUploadResult | null = null;
     try {
       const loginResponse = await fetch(`${STAGING_API_URL}/api/mobile/login`, {
         method: "POST",
@@ -94,6 +99,7 @@ export default function App() {
       }
       token = loginBody.token;
 
+      setUploadPhase("100枚分のアップロードURLを取得中…");
       const files = result.assetIds.map((_, index) => ({
         filename: `${String(index + 1).padStart(3, "0")}.jpg`,
       }));
@@ -113,13 +119,15 @@ export default function App() {
         throw new Error(signedBody.error || "アップロードURLを取得できませんでした");
       }
 
-      const nativeResult = await FastPhotoPicker.prepareAndUploadPhotos(
+      setUploadPhase("写真を圧縮して検証S3へ送信中…");
+      nativeResult = await FastPhotoPicker.prepareAndUploadPhotos(
         result.assetIds,
         signedBody.map((target: { uploadUrl: string }) => target.uploadUrl),
         720,
         0.45,
       );
 
+      setUploadPhase("検証S3からテスト写真を削除中…");
       const deleteResponse = await fetch(
         `${STAGING_API_URL}/api/mobile-test/runs/${runId}`,
         { method: "DELETE", headers: { authorization: `Bearer ${token}` } },
@@ -128,10 +136,30 @@ export default function App() {
       if (!deleteResponse.ok) {
         throw new Error(deleteBody.error || "検証写真を削除できませんでした");
       }
+      cleanupCompleted = true;
       setUploadResult({ ...nativeResult, deletedCount: deleteBody.deletedCount });
+      setStagingPassword("");
+      setUploadPhase("完了（検証写真は削除済み）");
     } catch (uploadError) {
       setError(uploadError instanceof Error ? uploadError.message : String(uploadError));
     } finally {
+      if (token && !cleanupCompleted) {
+        setUploadPhase("エラー後のテスト写真を削除中…");
+        try {
+          const cleanupResponse = await fetch(
+            `${STAGING_API_URL}/api/mobile-test/runs/${runId}`,
+            { method: "DELETE", headers: { authorization: `Bearer ${token}` } },
+          );
+          cleanupCompleted = cleanupResponse.ok;
+        } catch {
+          cleanupCompleted = false;
+        }
+        setUploadPhase(
+          cleanupCompleted
+            ? "エラー終了（送信済み写真は削除済み）"
+            : "エラー終了（自動削除は1日後）",
+        );
+      }
       setIsUploading(false);
     }
   };
@@ -177,6 +205,48 @@ export default function App() {
               </Text>
             </Pressable>
 
+            <Text style={[styles.note, styles.uploadHeading]}>
+              実運用フロー：選択した写真を1回だけ準備し、検証専用S3へ送信して直後に削除します。
+            </Text>
+            <TextInput
+              style={styles.passwordInput}
+              value={stagingPassword}
+              onChangeText={setStagingPassword}
+              placeholder="検証環境のパスワード"
+              secureTextEntry
+              autoCapitalize="none"
+              autoCorrect={false}
+              editable={!isUploading}
+            />
+            <Pressable
+              style={[styles.button, styles.benchmarkButton, isUploading && styles.disabledButton]}
+              onPress={uploadToStaging}
+              disabled={isUploading || !stagingPassword || result.assetIds.length === 0}
+            >
+              <Text style={styles.buttonText}>
+                {isUploading ? "実送信処理中…" : "選択写真を検証S3へ実送信"}
+              </Text>
+            </Pressable>
+            {!!uploadPhase && <Text style={styles.phase}>{uploadPhase}</Text>}
+            {uploadResult && (
+              <View style={styles.preparationResult}>
+                <Text style={styles.resultTitle}>検証S3送信結果</Text>
+                <Text style={styles.metric}>準備：{uploadResult.preparationMs}ms</Text>
+                <Text style={styles.metric}>送信：{uploadResult.uploadMs}ms</Text>
+                <Text style={styles.metric}>合計：{uploadResult.totalMs}ms</Text>
+                <Text style={styles.metric}>
+                  成功：{uploadResult.uploadedCount}枚／失敗：{uploadResult.failedCount}枚
+                </Text>
+                <Text style={styles.metric}>
+                  送信容量：{megabytes(uploadResult.uploadedBytes)}MB
+                </Text>
+                <Text style={styles.metric}>検証S3から削除：{uploadResult.deletedCount}枚</Text>
+                {!!uploadResult.firstError && (
+                  <Text style={styles.error}>{uploadResult.firstError}</Text>
+                )}
+              </View>
+            )}
+
             {preparation && (
               <View style={styles.preparationResult}>
                 <Text style={styles.resultTitle}>準備結果（本番送信なし）</Text>
@@ -194,43 +264,6 @@ export default function App() {
                   幅720px・JPEG品質45%・同時処理2枚。現場で撮影して端末に
                   保存された原本のみを処理し、iCloud取得や外部送信は行いません。
                 </Text>
-                <TextInput
-                  style={styles.passwordInput}
-                  value={stagingPassword}
-                  onChangeText={setStagingPassword}
-                  placeholder="検証環境のパスワード"
-                  secureTextEntry
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  editable={!isUploading}
-                />
-                <Pressable
-                  style={[styles.button, styles.benchmarkButton, isUploading && styles.disabledButton]}
-                  onPress={uploadToStaging}
-                  disabled={isUploading || !stagingPassword || result.assetIds.length === 0}
-                >
-                  <Text style={styles.buttonText}>
-                    {isUploading ? "検証S3へ送信・削除中…" : "検証S3へ実送信して計測"}
-                  </Text>
-                </Pressable>
-                {uploadResult && (
-                  <View style={styles.preparationResult}>
-                    <Text style={styles.resultTitle}>検証S3送信結果</Text>
-                    <Text style={styles.metric}>準備：{uploadResult.preparationMs}ms</Text>
-                    <Text style={styles.metric}>送信：{uploadResult.uploadMs}ms</Text>
-                    <Text style={styles.metric}>合計：{uploadResult.totalMs}ms</Text>
-                    <Text style={styles.metric}>
-                      成功：{uploadResult.uploadedCount}枚／失敗：{uploadResult.failedCount}枚
-                    </Text>
-                    <Text style={styles.metric}>
-                      送信容量：{megabytes(uploadResult.uploadedBytes)}MB
-                    </Text>
-                    <Text style={styles.metric}>検証S3から削除：{uploadResult.deletedCount}枚</Text>
-                    {!!uploadResult.firstError && (
-                      <Text style={styles.error}>{uploadResult.firstError}</Text>
-                    )}
-                  </View>
-                )}
               </View>
             )}
           </View>
@@ -267,5 +300,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     backgroundColor: "#fff",
   },
+  uploadHeading: { marginTop: 22, fontWeight: "700", color: "#36564e" },
+  phase: { marginTop: 12, color: "#36564e", fontSize: 15, textAlign: "center" },
   error: { marginTop: 20, color: "#b42318", fontSize: 15 },
 });

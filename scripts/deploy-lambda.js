@@ -49,6 +49,7 @@ const {
   HeadBucketCommand,
   GetBucketCorsCommand,
   PutBucketCorsCommand,
+  PutBucketLifecycleConfigurationCommand,
 } = require("@aws-sdk/client-s3");
 
 const REGION = process.env.AWS_REGION || "ap-northeast-1";
@@ -297,6 +298,31 @@ async function ensureBucket() {
   await clients.s3.send(new CreateBucketCommand(input));
 }
 
+async function setStagingBucketLifecycle() {
+  if (!IS_MOBILE_STAGING) return;
+  await clients.s3.send(
+    new PutBucketLifecycleConfigurationCommand({
+      Bucket: BUCKET,
+      LifecycleConfiguration: {
+        Rules: [
+          {
+            ID: "expire-mobile-test-uploads",
+            Status: "Enabled",
+            Filter: { Prefix: "_system/mobile-test/" },
+            Expiration: { Days: 1 },
+          },
+          {
+            ID: "expire-mobile-login-attempts",
+            Status: "Enabled",
+            Filter: { Prefix: LOGIN_ATTEMPTS_PREFIX },
+            Expiration: { Days: 1 },
+          },
+        ],
+      },
+    }),
+  );
+}
+
 async function waitForFunctionReady() {
   for (let attempt = 0; attempt < 120; attempt += 1) {
     const result = await clients.lambda.send(
@@ -486,6 +512,7 @@ async function main() {
   }
 
   await ensureBucket();
+  await setStagingBucketLifecycle();
 
   const repository = await getOrCreateRepository();
   await allowLambdaToPullImage(identity.Account);
