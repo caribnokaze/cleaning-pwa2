@@ -1,4 +1,11 @@
-require("dotenv").config();
+const DEPLOY_TARGET = process.env.DEPLOY_TARGET || "production";
+const IS_MOBILE_STAGING = DEPLOY_TARGET === "mobile-staging";
+if (!IS_MOBILE_STAGING && DEPLOY_TARGET !== "production") {
+  throw new Error(`未対応のDEPLOY_TARGETです: ${DEPLOY_TARGET}`);
+}
+require("dotenv").config({
+  path: IS_MOBILE_STAGING ? ".env.mobile-staging" : ".env",
+});
 const { spawnSync } = require("child_process");
 const {
   STSClient,
@@ -38,6 +45,8 @@ const {
 } = require("@aws-sdk/client-lambda");
 const {
   S3Client,
+  CreateBucketCommand,
+  HeadBucketCommand,
   GetBucketCorsCommand,
   PutBucketCorsCommand,
 } = require("@aws-sdk/client-s3");
@@ -46,12 +55,24 @@ const REGION = process.env.AWS_REGION || "ap-northeast-1";
 const BUCKET =
   process.env.S3_BUCKET ||
   "tocoro-cleaning-report-881224647732-ap-northeast-1-an";
-const FUNCTION_NAME = "tocoro-cleaning-report";
-const REPOSITORY_NAME = "tocoro-cleaning-report-lambda";
-const ROLE_NAME = "TocoroCleaningLambdaRole";
-const LOGIN_ATTEMPTS_PREFIX = "_system/login-attempts";
-const APP_PASSWORD_SECRET = "tocoro-cleaning/app-password";
-const AUTH_SECRET_NAME = "tocoro-cleaning/auth-secret";
+const FUNCTION_NAME = IS_MOBILE_STAGING
+  ? "tocoro-mobile-staging"
+  : "tocoro-cleaning-report";
+const REPOSITORY_NAME = IS_MOBILE_STAGING
+  ? "tocoro-mobile-staging"
+  : "tocoro-cleaning-report-lambda";
+const ROLE_NAME = IS_MOBILE_STAGING
+  ? "TocoroMobileStagingLambdaRole"
+  : "TocoroCleaningLambdaRole";
+const LOGIN_ATTEMPTS_PREFIX = IS_MOBILE_STAGING
+  ? "_system/mobile-staging/login-attempts"
+  : "_system/login-attempts";
+const APP_PASSWORD_SECRET = IS_MOBILE_STAGING
+  ? "tocoro-mobile-staging/app-password"
+  : "tocoro-cleaning/app-password";
+const AUTH_SECRET_NAME = IS_MOBILE_STAGING
+  ? "tocoro-mobile-staging/auth-secret"
+  : "tocoro-cleaning/auth-secret";
 const IMAGE_TAG = "latest";
 
 if (!process.env.APP_PASSWORD || !process.env.AUTH_SECRET) {
@@ -65,6 +86,14 @@ if (
 ) {
   throw new Error(
     "APP_PASSWORDは8文字以上、AUTH_SECRETは32文字以上にしてください。",
+  );
+}
+if (
+  IS_MOBILE_STAGING &&
+  !/^tocoro-mobile-staging-[0-9]{12}-ap-northeast-1$/.test(BUCKET)
+) {
+  throw new Error(
+    "検証用S3_BUCKETは tocoro-mobile-staging-[12桁のAWSアカウントID]-ap-northeast-1 にしてください。",
   );
 }
 
@@ -188,13 +217,34 @@ async function getOrCreateRole() {
     created = true;
   }
 
-  await clients.iam.send(
-    new AttachRolePolicyCommand({
-      RoleName: ROLE_NAME,
-      PolicyArn:
-        "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
-    }),
-  );
+  if (IS_MOBILE_STAGING) {
+    await clients.iam.send(
+      new PutRolePolicyCommand({
+        RoleName: ROLE_NAME,
+        PolicyName: "TocoroMobileStagingLambdaLogs",
+        PolicyDocument: JSON.stringify({
+          Version: "2012-10-17",
+          Statement: [{
+            Effect: "Allow",
+            Action: [
+              "logs:CreateLogGroup",
+              "logs:CreateLogStream",
+              "logs:PutLogEvents",
+            ],
+            Resource: "arn:aws:logs:*:*:*",
+          }],
+        }),
+      }),
+    );
+  } else {
+    await clients.iam.send(
+      new AttachRolePolicyCommand({
+        RoleName: ROLE_NAME,
+        PolicyArn:
+          "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
+      }),
+    );
+  }
 
   return { role, created };
 }
@@ -203,7 +253,9 @@ async function setRolePolicy(passwordSecretArn, authSecretArn) {
   await clients.iam.send(
     new PutRolePolicyCommand({
       RoleName: ROLE_NAME,
-      PolicyName: "TocoroCleaningLambdaDataAccess",
+      PolicyName: IS_MOBILE_STAGING
+        ? "TocoroMobileStagingLambdaDataAccess"
+        : "TocoroCleaningLambdaDataAccess",
       PolicyDocument: JSON.stringify({
         Version: "2012-10-17",
         Statement: [
@@ -226,6 +278,23 @@ async function setRolePolicy(passwordSecretArn, authSecretArn) {
       }),
     }),
   );
+}
+
+async function ensureBucket() {
+  try {
+    await clients.s3.send(new HeadBucketCommand({ Bucket: BUCKET }));
+    return;
+  } catch (error) {
+    if (error.$metadata?.httpStatusCode !== 404 && error.name !== "NotFound") {
+      throw error;
+    }
+  }
+
+  const input = { Bucket: BUCKET };
+  if (REGION !== "us-east-1") {
+    input.CreateBucketConfiguration = { LocationConstraint: REGION };
+  }
+  await clients.s3.send(new CreateBucketCommand(input));
 }
 
 async function waitForFunctionReady() {
@@ -405,6 +474,18 @@ async function updateBucketCors(origin) {
 async function main() {
   const identity = await clients.sts.send(new GetCallerIdentityCommand({}));
   console.log(`AWS account: ${identity.Account} / region: ${REGION}`);
+
+  if (IS_MOBILE_STAGING) {
+    const expectedBucket = `tocoro-mobile-staging-${identity.Account}-${REGION}`;
+    if (REGION !== "ap-northeast-1" || BUCKET !== expectedBucket) {
+      throw new Error(
+        `検証環境の安全チェックに失敗しました。S3_BUCKETは ${expectedBucket} にしてください。`,
+      );
+    }
+    console.log("Deploy target: isolated mobile staging");
+  }
+
+  await ensureBucket();
 
   const repository = await getOrCreateRepository();
   await allowLambdaToPullImage(identity.Account);

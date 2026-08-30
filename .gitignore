@@ -1,8 +1,8 @@
 .env
 .env.*
 !.env.example
+!.env.mobile-staging.example
 node_modules/
 npm-debug.log*
 .DS_Store
 .local-tools/
-

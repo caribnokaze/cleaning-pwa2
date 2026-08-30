@@ -18,6 +18,7 @@
   "scripts": {
     "start": "node server.js",
     "deploy:aws": "node scripts/deploy-aws.js",
-    "deploy:lambda": "node scripts/deploy-lambda.js"
+    "deploy:lambda": "node scripts/deploy-lambda.js",
+    "deploy:mobile-staging": "DEPLOY_TARGET=mobile-staging AWS_PROFILE=tocoro-mobile-staging node scripts/deploy-lambda.js"
   }
 }

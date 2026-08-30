@@ -183,6 +183,20 @@ async function main() {
     throw new Error("モバイルテスト用の署名付きURLを確認できませんでした。");
   }
 
+  const shouldUploadTest = process.argv.includes("--upload-test");
+  if (shouldUploadTest) {
+    const tinyJpeg = Buffer.from([0xff, 0xd8, 0xff, 0xd9]);
+    const uploadResponse = await fetch(mobileSignedBody[0].uploadUrl, {
+      method: "PUT",
+      headers: { "content-type": "image/jpeg" },
+      body: tinyJpeg,
+    });
+    console.log(`MOBILE_UPLOAD_STATUS=${uploadResponse.status}`);
+    if (!uploadResponse.ok) {
+      throw new Error("モバイルテスト用S3アップロードに失敗しました。");
+    }
+  }
+
   const mobileDelete = await fetch(
     `${baseUrl}/api/mobile-test/runs/${encodeURIComponent(mobileRunId)}`,
     {
@@ -192,11 +206,12 @@ async function main() {
   );
   const mobileDeleteBody = await mobileDelete.json();
   console.log(`MOBILE_DELETE_STATUS=${mobileDelete.status}`);
-  console.log(`MOBILE_DELETE_EMPTY=${mobileDeleteBody.deletedCount === 0}`);
-  if (!mobileDelete.ok || mobileDeleteBody.deletedCount !== 0) {
-    throw new Error("空のモバイルテスト実行を確認できませんでした。");
+  const expectedDeletedCount = shouldUploadTest ? 1 : 0;
+  console.log(`MOBILE_DELETE_COUNT=${mobileDeleteBody.deletedCount}`);
+  if (!mobileDelete.ok || mobileDeleteBody.deletedCount !== expectedDeletedCount) {
+    throw new Error("モバイルテストデータの削除を確認できませんでした。");
   }
-  console.log("NO_PHOTO_UPLOADED=true");
+  console.log(`MOBILE_TEST_CLEANED=${mobileDeleteBody.deletedCount === expectedDeletedCount}`);
 }
 
 main().catch((error) => {
