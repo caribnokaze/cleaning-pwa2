@@ -79,3 +79,14 @@ npm run deploy
 スクリプトは最初にAWSアカウント、東京リージョン、検証用バケット名を照合します。
 一致しない場合はAWSリソースを変更せず停止します。成功時に新しいLambda Function URLが
 表示されます。そのURLをモバイルビルドの`EXPO_PUBLIC_MOBILE_STAGING_API_URL`へ設定します。
+
+## デプロイ後の疎通確認
+
+実写真を使わず、4バイトのダミーJPEGを1件送信・確認・削除します。
+
+```bash
+set -a
+source .env.mobile-staging
+set +a
+npm run test:staging -- <staging-api-url>
+```

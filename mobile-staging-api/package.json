@@ -5,8 +5,9 @@
   "main": "server.js",
   "scripts": {
     "start": "node start.js",
-    "test": "node --test",
-    "deploy": "node scripts/deploy.js"
+    "test": "node --test test/*.test.js",
+    "deploy": "node scripts/deploy.js",
+    "test:staging": "node scripts/smoke-test.js"
   },
   "engines": {
     "node": ">=20"
