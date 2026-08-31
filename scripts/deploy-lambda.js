@@ -356,6 +356,7 @@ async function deployFunction(imageUri, roleArn, secretArns) {
   const environment = {
     Variables: {
       NODE_ENV: "production",
+      DEPLOY_TARGET,
       S3_BUCKET: BUCKET,
       APP_PASSWORD_SECRET_ID: secretArns.password,
       AUTH_SECRET_ID: secretArns.auth,

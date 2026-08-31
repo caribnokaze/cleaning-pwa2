@@ -164,6 +164,9 @@ async function main() {
     },
     body: JSON.stringify({
       runId: mobileRunId,
+      date: "2099-01-01",
+      site: "mobile-check",
+      staff: "mobile-check",
       files: [{ filename: "001.jpg" }],
     }),
   });
@@ -173,12 +176,12 @@ async function main() {
     `MOBILE_SIGNED_URL_OK=${Boolean(mobileSignedBody[0]?.uploadUrl?.startsWith("https://"))}`,
   );
   console.log(
-    `MOBILE_TEST_PREFIX_OK=${mobileSignedBody[0]?.key === `_system/mobile-test/${mobileRunId}/001.jpg`}`,
+    `MOBILE_TEST_PREFIX_OK=${mobileSignedBody[0]?.key === `_system/mobile-test/${mobileRunId}/2099-01-01/mobile-check/mobile-check/001.jpg`}`,
   );
   if (
     !mobileSigned.ok ||
     !mobileSignedBody[0]?.uploadUrl?.startsWith("https://") ||
-    mobileSignedBody[0]?.key !== `_system/mobile-test/${mobileRunId}/001.jpg`
+    mobileSignedBody[0]?.key !== `_system/mobile-test/${mobileRunId}/2099-01-01/mobile-check/mobile-check/001.jpg`
   ) {
     throw new Error("モバイルテスト用の署名付きURLを確認できませんでした。");
   }
@@ -194,6 +197,23 @@ async function main() {
     console.log(`MOBILE_UPLOAD_STATUS=${uploadResponse.status}`);
     if (!uploadResponse.ok) {
       throw new Error("モバイルテスト用S3アップロードに失敗しました。");
+    }
+
+    const verifyResponse = await fetch(
+      `${baseUrl}/api/mobile-test/runs/${encodeURIComponent(mobileRunId)}`,
+      { headers: { authorization: `Bearer ${mobileToken}` } },
+    );
+    const verifyBody = await verifyResponse.json();
+    console.log(`MOBILE_VERIFY_STATUS=${verifyResponse.status}`);
+    console.log(`MOBILE_VERIFY_COUNT=${verifyBody.photoCount}`);
+    if (
+      !verifyResponse.ok ||
+      verifyBody.photoCount !== 1 ||
+      verifyBody.date !== "2099-01-01" ||
+      verifyBody.site !== "mobile-check" ||
+      verifyBody.staff !== "mobile-check"
+    ) {
+      throw new Error("モバイルテストデータの保存内容を確認できませんでした。");
     }
   }
 

@@ -22,6 +22,7 @@ const AUTH_TTL_SECONDS = 12 * 60 * 60;
 let APP_PASSWORD = process.env.APP_PASSWORD || "";
 let AUTH_SECRET = process.env.AUTH_SECRET || "";
 const LOGIN_ATTEMPTS_PREFIX = process.env.LOGIN_ATTEMPTS_PREFIX || "";
+const IS_MOBILE_STAGING = process.env.DEPLOY_TARGET === "mobile-staging";
 
 app.disable("x-powered-by");
 app.set("trust proxy", 1);
@@ -385,9 +386,18 @@ app.post("/get-presigned-urls", async (req, res) => {
 
 app.post("/api/mobile-test/presigned-urls", async (req, res) => {
   try {
-    const { runId, files } = req.body || {};
+    if (!IS_MOBILE_STAGING) {
+      return res.status(404).json({ error: "Not found" });
+    }
+
+    const { runId, date, site, staff, files } = req.body || {};
     if (
       !/^[a-z0-9_-]{8,64}$/i.test(runId || "") ||
+      !/^\d{4}-\d{2}-\d{2}$/.test(date || "") ||
+      !site ||
+      !staff ||
+      !isSafePathSegment(site) ||
+      !isSafePathSegment(staff) ||
       !Array.isArray(files) ||
       files.length < 1 ||
       files.length > 100
@@ -402,7 +412,7 @@ app.post("/api/mobile-test/presigned-urls", async (req, res) => {
           throw new Error("Invalid mobile test filename");
         }
 
-        const key = `_system/mobile-test/${runId}/${filename}`;
+        const key = `_system/mobile-test/${runId}/${date}/${site}/${staff}/${filename}`;
         const uploadUrl = await getSignedUrl(
           s3Client,
           new PutObjectCommand({
@@ -427,6 +437,10 @@ app.post("/api/mobile-test/presigned-urls", async (req, res) => {
 
 app.delete("/api/mobile-test/runs/:runId", async (req, res) => {
   try {
+    if (!IS_MOBILE_STAGING) {
+      return res.status(404).json({ error: "Not found" });
+    }
+
     const runId = String(req.params.runId || "");
     if (!/^[a-z0-9_-]{8,64}$/i.test(runId)) {
       return res.status(400).json({ error: "テストIDが不正です" });
@@ -456,6 +470,37 @@ app.delete("/api/mobile-test/runs/:runId", async (req, res) => {
   } catch (error) {
     console.error("Mobile test deletion failed:", error);
     res.status(500).json({ error: "テスト写真を削除できませんでした" });
+  }
+});
+
+app.get("/api/mobile-test/runs/:runId", async (req, res) => {
+  try {
+    if (!IS_MOBILE_STAGING) {
+      return res.status(404).json({ error: "Not found" });
+    }
+
+    const runId = String(req.params.runId || "");
+    if (!/^[a-z0-9_-]{8,64}$/i.test(runId)) {
+      return res.status(400).json({ error: "テストIDが不正です" });
+    }
+
+    const prefix = `_system/mobile-test/${runId}/`;
+    const objects = (await listAllObjects(prefix)).filter(
+      (item) => item.Key && !item.Key.endsWith("/"),
+    );
+    const firstParts = objects[0]?.Key?.slice(prefix.length).split("/") || [];
+    res.set("Cache-Control", "no-store");
+    res.json({
+      runId,
+      date: firstParts[0] || "",
+      site: firstParts[1] || "",
+      staff: firstParts[2] || "",
+      photoCount: objects.length,
+      totalBytes: objects.reduce((total, item) => total + (item.Size || 0), 0),
+    });
+  } catch (error) {
+    console.error("Mobile test verification failed:", error);
+    res.status(500).json({ error: "テスト写真を確認できませんでした" });
   }
 });
 
