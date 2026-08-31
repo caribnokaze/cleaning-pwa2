@@ -143,7 +143,7 @@ public final class FastPhotoPickerModule: Module {
 
     AsyncFunction("prepareAndUploadPhotos") {
       (assetIds: [String], uploadUrls: [String], maxWidth: Double,
-       jpegQuality: Double, promise: Promise) in
+       jpegQuality: Double, simulationMode: String, promise: Promise) in
       let count = min(min(assetIds.count, uploadUrls.count), 100)
       guard count > 0 else {
         promise.reject("ERR_EMPTY_UPLOAD", "アップロード対象がありません")
@@ -180,12 +180,14 @@ public final class FastPhotoPickerModule: Module {
         let prepareConcurrency = DispatchSemaphore(value: 2)
         let resultLock = NSLock()
         var preparedFiles: [Int: (url: URL, size: Int)] = [:]
+        var failedIndexes: [Int] = []
         var firstError = ""
 
         for (index, identifier) in identifiers.enumerated() {
           guard let asset = assetsById[identifier] else {
             resultLock.lock()
             if firstError.isEmpty { firstError = "写真IDを読み込めません" }
+            failedIndexes.append(index)
             resultLock.unlock()
             continue
           }
@@ -203,6 +205,7 @@ public final class FastPhotoPickerModule: Module {
                     ) else {
                 resultLock.lock()
                 if firstError.isEmpty { firstError = "端末内の写真原本を準備できません" }
+                failedIndexes.append(index)
                 resultLock.unlock()
                 return
               }
@@ -217,6 +220,7 @@ public final class FastPhotoPickerModule: Module {
               } catch {
                 resultLock.lock()
                 if firstError.isEmpty { firstError = "一時JPEGを保存できません" }
+                failedIndexes.append(index)
                 resultLock.unlock()
               }
             }
@@ -236,30 +240,71 @@ public final class FastPhotoPickerModule: Module {
         let uploadGroup = DispatchGroup()
         var uploadedCount = 0
         var uploadedBytes = 0
+        var automaticRetryCount = 0
+        let maxAutomaticRetries = 3
 
         for (index, file) in preparedFiles {
           guard let targetURL = URL(string: targets[index]) else { continue }
-          var request = URLRequest(url: targetURL)
-          request.httpMethod = "PUT"
-          request.setValue("image/jpeg", forHTTPHeaderField: "Content-Type")
           uploadGroup.enter()
-          session.uploadTask(with: request, fromFile: file.url) { _, response, error in
-            if let httpResponse = response as? HTTPURLResponse,
-               (200..<300).contains(httpResponse.statusCode) {
-              resultLock.lock()
-              uploadedCount += 1
-              uploadedBytes += file.size
-              resultLock.unlock()
-            } else {
+          var uploadAttempt: ((Int) -> Void)!
+          uploadAttempt = { attempt in
+            // ステージング実機試験専用。10枚ごとに全自動再試行を失敗させ、
+            // JavaScript側の「失敗分だけ手動再送」を検証する。
+            if simulationMode == "manual-retry" && (index + 1).isMultiple(of: 10) {
+              if attempt < maxAutomaticRetries {
+                resultLock.lock()
+                automaticRetryCount += 1
+                resultLock.unlock()
+                DispatchQueue.global(qos: .userInitiated).asyncAfter(
+                  deadline: .now() + (0.2 * pow(2.0, Double(attempt)))
+                ) { uploadAttempt(attempt + 1) }
+              } else {
+                resultLock.lock()
+                failedIndexes.append(index)
+                if firstError.isEmpty { firstError = "ステージング用の通信失敗を再現しました" }
+                resultLock.unlock()
+                uploadGroup.leave()
+              }
+              return
+            }
+
+            var request = URLRequest(url: targetURL)
+            request.httpMethod = "PUT"
+            request.setValue("image/jpeg", forHTTPHeaderField: "Content-Type")
+            session.uploadTask(with: request, fromFile: file.url) { _, response, error in
+              let statusCode = (response as? HTTPURLResponse)?.statusCode
+              if let statusCode, (200..<300).contains(statusCode) {
+                resultLock.lock()
+                uploadedCount += 1
+                uploadedBytes += file.size
+                resultLock.unlock()
+                uploadGroup.leave()
+                return
+              }
+
+              let retryableStatus = statusCode == 408 || statusCode == 429 ||
+                (statusCode.map { (500..<600).contains($0) } ?? false)
+              if attempt < maxAutomaticRetries && (error != nil || retryableStatus) {
+                resultLock.lock()
+                automaticRetryCount += 1
+                resultLock.unlock()
+                DispatchQueue.global(qos: .userInitiated).asyncAfter(
+                  deadline: .now() + (0.2 * pow(2.0, Double(attempt)))
+                ) { uploadAttempt(attempt + 1) }
+                return
+              }
+
               let detail = (error as NSError?).map {
                 "\($0.domain) \($0.code): \($0.localizedDescription)"
-              } ?? "アップロード応答がありません"
+              } ?? statusCode.map { "HTTP \($0)" } ?? "アップロード応答がありません"
               resultLock.lock()
+              failedIndexes.append(index)
               if firstError.isEmpty { firstError = detail }
               resultLock.unlock()
-            }
-            uploadGroup.leave()
-          }.resume()
+              uploadGroup.leave()
+            }.resume()
+          }
+          uploadAttempt(0)
         }
 
         uploadGroup.notify(queue: .main) {
@@ -275,6 +320,8 @@ public final class FastPhotoPickerModule: Module {
             "totalMs": Int((CFAbsoluteTimeGetCurrent() - totalStartedAt) * 1000),
             "uploadedBytes": uploadedBytes,
             "firstError": firstError,
+            "failedIndexes": failedIndexes.sorted(),
+            "automaticRetryCount": automaticRetryCount,
           ])
         }
       }

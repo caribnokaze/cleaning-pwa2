@@ -6,6 +6,7 @@ import {
   SafeAreaView,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   View,
@@ -26,9 +27,14 @@ type StagingUploadResult = PhotoUploadResult & {
   verifiedCount: number;
   verifiedBytes: number;
   deletedCount?: number;
+  manualRetryRounds: number;
 };
 
-type PendingStagingRun = { runId: string; token: string };
+type PendingStagingRun = {
+  runId: string;
+  token: string;
+  failedIndexes: number[];
+};
 
 const localDateString = () => {
   const now = new Date();
@@ -47,6 +53,8 @@ export default function App() {
   const [staffName, setStaffName] = useState("");
   const [isUploading, setIsUploading] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isRetrying, setIsRetrying] = useState(false);
+  const [simulateUploadFailures, setSimulateUploadFailures] = useState(false);
   const [uploadPhase, setUploadPhase] = useState("");
   const [uploadResult, setUploadResult] = useState<StagingUploadResult | null>(null);
   const [pendingRun, setPendingRun] = useState<PendingStagingRun | null>(null);
@@ -160,6 +168,7 @@ export default function App() {
         signedBody.map((target: { uploadUrl: string }) => target.uploadUrl),
         720,
         0.45,
+        simulateUploadFailures ? "manual-retry" : "none",
       );
 
       setUploadPhase("検証S3の保存内容を確認中…");
@@ -171,21 +180,31 @@ export default function App() {
       if (!verifyResponse.ok) {
         throw new Error(verifyBody.error || "検証写真を確認できませんでした");
       }
-      if (verifyBody.photoCount !== nativeResult.uploadedCount) {
-        throw new Error("送信成功数と検証S3の保存数が一致しませんでした");
-      }
+      const storedFilenames = new Set<string>(verifyBody.filenames || []);
+      const failedIndexes = files
+        .map((file, index) => (storedFilenames.has(file.filename) ? -1 : index))
+        .filter((index) => index >= 0);
       keepUploadedPhotos = true;
-      setPendingRun({ runId, token });
+      setPendingRun({ runId, token, failedIndexes });
       setUploadResult({
         ...nativeResult,
+        uploadedCount: verifyBody.photoCount,
+        failedCount: failedIndexes.length,
+        uploadedBytes: verifyBody.totalBytes,
+        failedIndexes,
         date,
         site,
         staff,
         verifiedCount: verifyBody.photoCount,
         verifiedBytes: verifyBody.totalBytes,
+        manualRetryRounds: 0,
       });
       setStagingPassword("");
-      setUploadPhase("保存確認完了（確認後に削除してください）");
+      setUploadPhase(
+        failedIndexes.length
+          ? `${failedIndexes.length}枚が未送信です（失敗分だけ再送してください）`
+          : "保存確認完了（確認後に削除してください）",
+      );
     } catch (uploadError) {
       setError(uploadError instanceof Error ? uploadError.message : String(uploadError));
     } finally {
@@ -207,6 +226,101 @@ export default function App() {
         );
       }
       setIsUploading(false);
+    }
+  };
+
+  const retryFailedPhotos = async () => {
+    if (
+      !result ||
+      !pendingRun ||
+      !uploadResult ||
+      !pendingRun.failedIndexes.length ||
+      isRetrying ||
+      !FastPhotoPicker
+    ) return;
+    setError("");
+    setIsRetrying(true);
+    setUploadPhase(`${pendingRun.failedIndexes.length}枚の再送URLを取得中…`);
+    try {
+      const retryIndexes = pendingRun.failedIndexes;
+      const files = retryIndexes.map((index) => ({
+        filename: `${String(index + 1).padStart(3, "0")}.jpg`,
+      }));
+      const signedResponse = await fetch(
+        `${STAGING_API_URL}/api/mobile-test/presigned-urls`,
+        {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${pendingRun.token}`,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            runId: pendingRun.runId,
+            date: uploadResult.date,
+            site: uploadResult.site,
+            staff: uploadResult.staff,
+            files,
+          }),
+        },
+      );
+      const signedBody = await signedResponse.json();
+      if (!signedResponse.ok || !Array.isArray(signedBody)) {
+        throw new Error(signedBody.error || "再送URLを取得できませんでした");
+      }
+
+      setUploadPhase(`${retryIndexes.length}枚だけを準備して再送中…`);
+      const retryResult = await FastPhotoPicker.prepareAndUploadPhotos(
+        retryIndexes.map((index) => result.assetIds[index]),
+        signedBody.map((target: { uploadUrl: string }) => target.uploadUrl),
+        720,
+        0.45,
+        "none",
+      );
+
+      const verifyResponse = await fetch(
+        `${STAGING_API_URL}/api/mobile-test/runs/${pendingRun.runId}`,
+        { headers: { authorization: `Bearer ${pendingRun.token}` } },
+      );
+      const verifyBody = await verifyResponse.json();
+      if (!verifyResponse.ok) {
+        throw new Error(verifyBody.error || "再送後の保存内容を確認できませんでした");
+      }
+      const storedFilenames = new Set<string>(verifyBody.filenames || []);
+      const remainingIndexes = result.assetIds
+        .map((_, index) =>
+          storedFilenames.has(`${String(index + 1).padStart(3, "0")}.jpg`)
+            ? -1
+            : index,
+        )
+        .filter((index) => index >= 0);
+
+      setPendingRun({ ...pendingRun, failedIndexes: remainingIndexes });
+      setUploadResult((current) => current ? {
+        ...current,
+        uploadedCount: verifyBody.photoCount,
+        failedCount: remainingIndexes.length,
+        failedIndexes: remainingIndexes,
+        preparationMs: current.preparationMs + retryResult.preparationMs,
+        uploadMs: current.uploadMs + retryResult.uploadMs,
+        totalMs: current.totalMs + retryResult.totalMs,
+        uploadedBytes: verifyBody.totalBytes,
+        verifiedCount: verifyBody.photoCount,
+        verifiedBytes: verifyBody.totalBytes,
+        automaticRetryCount:
+          current.automaticRetryCount + retryResult.automaticRetryCount,
+        manualRetryRounds: current.manualRetryRounds + 1,
+        firstError: remainingIndexes.length ? retryResult.firstError : "",
+      } : current);
+      setUploadPhase(
+        remainingIndexes.length
+          ? `再送後も${remainingIndexes.length}枚が未送信です`
+          : "再送完了・100枚の保存確認済み（確認後に削除してください）",
+      );
+    } catch (retryError) {
+      setError(retryError instanceof Error ? retryError.message : String(retryError));
+      setUploadPhase("再送に失敗しました（もう一度再送できます）");
+    } finally {
+      setIsRetrying(false);
     }
   };
 
@@ -276,6 +390,19 @@ export default function App() {
             placeholder="例：田中"
             editable={!isUploading && !pendingRun}
           />
+          <View style={styles.simulationRow}>
+            <View style={styles.simulationText}>
+              <Text style={styles.fieldLabel}>再送機能の試験</Text>
+              <Text style={styles.gestureHint}>
+                有効にすると10枚を意図的に失敗させます（ステージング限定）。
+              </Text>
+            </View>
+            <Switch
+              value={simulateUploadFailures}
+              onValueChange={setSimulateUploadFailures}
+              disabled={isUploading || !!pendingRun}
+            />
+          </View>
         </View>
 
         <Pressable style={styles.button} onPress={() => openPicker(true)}>
@@ -360,6 +487,17 @@ export default function App() {
                   検証S3で確認：{uploadResult.verifiedCount}枚／
                   {megabytes(uploadResult.verifiedBytes)}MB
                 </Text>
+                <Text style={styles.metric}>
+                  自動再試行：{uploadResult.automaticRetryCount}回
+                </Text>
+                <Text style={styles.metric}>
+                  手動再送：{uploadResult.manualRetryRounds}回
+                </Text>
+                {!!uploadResult.failedIndexes.length && (
+                  <Text style={styles.error}>
+                    未送信：{uploadResult.failedIndexes.map((index) => index + 1).join("、")}番
+                  </Text>
+                )}
                 {uploadResult.deletedCount !== undefined && (
                   <Text style={styles.metric}>
                     検証S3から削除：{uploadResult.deletedCount}枚
@@ -367,6 +505,19 @@ export default function App() {
                 )}
                 {!!uploadResult.firstError && (
                   <Text style={styles.error}>{uploadResult.firstError}</Text>
+                )}
+                {!!pendingRun?.failedIndexes.length && (
+                  <Pressable
+                    style={[styles.button, styles.retryButton, isRetrying && styles.disabledButton]}
+                    onPress={retryFailedPhotos}
+                    disabled={isRetrying}
+                  >
+                    <Text style={styles.buttonText}>
+                      {isRetrying
+                        ? "失敗分を再送中…"
+                        : `失敗した${pendingRun.failedIndexes.length}枚だけ再送`}
+                    </Text>
+                  </Pressable>
                 )}
                 {pendingRun && (
                   <Pressable
@@ -419,6 +570,8 @@ const styles = StyleSheet.create({
   gestureHint: { marginTop: 10, color: "#60706c", fontSize: 13, lineHeight: 19 },
   reportFields: { marginBottom: 22, padding: 16, borderRadius: 12, backgroundColor: "#fff" },
   fieldLabel: { marginTop: 8, marginBottom: 6, color: "#36564e", fontWeight: "700" },
+  simulationRow: { marginTop: 14, flexDirection: "row", alignItems: "center" },
+  simulationText: { flex: 1, paddingRight: 12 },
   textInput: {
     borderWidth: 1,
     borderColor: "#aebcb7",
@@ -448,6 +601,7 @@ const styles = StyleSheet.create({
   },
   uploadHeading: { marginTop: 22, fontWeight: "700", color: "#36564e" },
   deleteButton: { marginTop: 14, backgroundColor: "#9b2c2c" },
+  retryButton: { marginTop: 14, backgroundColor: "#9a6700" },
   phase: { marginTop: 12, color: "#36564e", fontSize: 15, textAlign: "center" },
   error: { marginTop: 20, color: "#b42318", fontSize: 15 },
 });

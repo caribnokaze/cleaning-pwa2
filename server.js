@@ -497,6 +497,10 @@ app.get("/api/mobile-test/runs/:runId", async (req, res) => {
       staff: firstParts[2] || "",
       photoCount: objects.length,
       totalBytes: objects.reduce((total, item) => total + (item.Size || 0), 0),
+      filenames: objects
+        .map((item) => item.Key?.split("/").pop() || "")
+        .filter(Boolean)
+        .sort(),
     });
   } catch (error) {
     console.error("Mobile test verification failed:", error);

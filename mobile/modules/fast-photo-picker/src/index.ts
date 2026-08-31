@@ -23,6 +23,8 @@ export type PhotoUploadResult = {
   totalMs: number;
   uploadedBytes: number;
   firstError: string;
+  failedIndexes: number[];
+  automaticRetryCount: number;
 };
 
 type FastPhotoPickerModule = {
@@ -38,6 +40,7 @@ type FastPhotoPickerModule = {
     uploadUrls: string[],
     maxWidth: number,
     jpegQuality: number,
+    simulationMode: "none" | "manual-retry",
   ): Promise<PhotoUploadResult>;
 };
 

@@ -211,7 +211,8 @@ async function main() {
       verifyBody.photoCount !== 1 ||
       verifyBody.date !== "2099-01-01" ||
       verifyBody.site !== "mobile-check" ||
-      verifyBody.staff !== "mobile-check"
+      verifyBody.staff !== "mobile-check" ||
+      verifyBody.filenames?.join(",") !== "001.jpg"
     ) {
       throw new Error("モバイルテストデータの保存内容を確認できませんでした。");
     }
