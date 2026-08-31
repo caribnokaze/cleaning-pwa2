@@ -251,6 +251,10 @@ class PhotoGridActivity : Activity() {
           if (selecting) positionAt(event.x, event.y)?.let(::applyDragRange)
         }
         MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+          if (event.actionMasked == MotionEvent.ACTION_UP && !selecting &&
+            abs(event.x - downX) <= touchSlop && abs(event.y - downY) <= touchSlop) {
+            positionAt(event.x, event.y)?.let(::toggle)
+          }
           selecting = false
           firstDragPosition = null
           lastDragPosition = null
@@ -288,7 +292,6 @@ class PhotoGridActivity : Activity() {
     override fun getItemCount() = photos.size
 
     override fun onBindViewHolder(holder: PhotoViewHolder, position: Int) {
-      holder.itemView.setOnClickListener { toggle(holder.bindingAdapterPosition) }
       holder.bind(position, true)
     }
 
