@@ -1,6 +1,9 @@
 {
-  "platforms": ["apple"],
+  "platforms": ["apple", "android"],
   "apple": {
     "modules": ["FastPhotoPickerModule"]
+  },
+  "android": {
+    "modules": ["expo.modules.fastphotopicker.FastPhotoPickerModule"]
   }
 }

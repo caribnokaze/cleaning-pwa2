@@ -118,15 +118,21 @@ export default function App() {
     setPreparation(null);
     setUploadResult(null);
     setUploadPhase("");
-    if (Platform.OS !== "ios" || !FastPhotoPicker) {
-      setError("この試作版の高速写真選択はiPhone実機用です。");
+    if ((Platform.OS !== "ios" && Platform.OS !== "android") || !FastPhotoPicker) {
+      setError("この試作版の高速写真選択はiPhone・Android実機用です。");
       return;
     }
     try {
       const nextResult = useSystemPicker
         ? await FastPhotoPicker.pickPhotosWithSystemPicker(100)
         : await FastPhotoPicker.pickPhotos(100);
-      setPickerName(useSystemPicker ? "Apple標準ピッカー" : "独自高速ピッカー");
+      setPickerName(
+        useSystemPicker
+          ? Platform.OS === "android"
+            ? "Android標準ピッカー"
+            : "Apple標準ピッカー"
+          : "独自高速ピッカー"
+      );
       setResult(nextResult);
     } catch (pickerError) {
       setError(pickerError instanceof Error ? pickerError.message : String(pickerError));
@@ -175,7 +181,7 @@ export default function App() {
     setUploadResult(null);
     setIsUploading(true);
     setUploadPhase("検証環境へログイン中…");
-    const runId = `ios-${Date.now()}`;
+    const runId = `${Platform.OS}-${Date.now()}`;
     const uploadJob: PersistedUploadJob = {
       version: 1,
       runId,
@@ -560,7 +566,7 @@ export default function App() {
         <Text style={styles.title}>TOCORO. 写真選択テスト</Text>
         <Text style={styles.description}>
           写真本体を読み込む前に、PhotoKitの写真IDだけを選択します。
-          Apple標準版と独自版で、操作性と100枚選択後の復帰時間を比較してください。
+          標準版と独自版で、操作性と100枚選択後の復帰時間を比較してください。
         </Text>
 
         <View style={styles.reportFields}>
@@ -605,7 +611,10 @@ export default function App() {
         </View>
 
         <Pressable style={styles.button} onPress={() => openPicker(true)}>
-          <Text style={styles.buttonText}>Apple標準ピッカー（最大100枚）</Text>
+          <Text style={styles.buttonText}>
+            {Platform.OS === "android" ? "Android標準ピッカー" : "Apple標準ピッカー"}
+            （最大100枚）
+          </Text>
         </Pressable>
 
         <Pressable style={[styles.button, styles.secondaryButton]} onPress={() => openPicker(false)}>
