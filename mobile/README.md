@@ -59,10 +59,10 @@ ReleaseビルドではJavaScript bundleをアプリへ含められるため、�
 
 ## 現場情報付きステージング試験
 
-検証API URLはリポジトリへ固定せず、`mobile/.env`に設定します。
+検証API URLはリポジトリへ固定せず、Git管理外の`mobile/.env.local`に設定します。
 
 ```bash
-cp .env.example .env
+cp .env.example .env.local
 ```
 
 ```env

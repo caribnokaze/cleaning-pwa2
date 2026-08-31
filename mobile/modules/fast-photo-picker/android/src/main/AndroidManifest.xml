@@ -6,6 +6,6 @@
       android:name="expo.modules.fastphotopicker.PhotoGridActivity"
       android:exported="false"
       android:screenOrientation="portrait"
-      android:theme="@style/AppTheme" />
+      android:theme="@android:style/Theme.Material.Light.NoActionBar" />
   </application>
 </manifest>
