@@ -1,5 +1,6 @@
 import { StatusBar } from "expo-status-bar";
-import { useState } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useEffect, useState } from "react";
 import {
   Platform,
   Pressable,
@@ -36,6 +37,33 @@ type PendingStagingRun = {
   failedIndexes: number[];
 };
 
+type PersistedUploadJob = {
+  version: 1;
+  runId: string;
+  date: string;
+  site: string;
+  staff: string;
+  assetIds: string[];
+  createdAt: string;
+};
+
+const UPLOAD_JOB_STORAGE_KEY = "tocoro.mobile-staging.pending-upload.v1";
+
+const isPersistedUploadJob = (value: unknown): value is PersistedUploadJob => {
+  if (!value || typeof value !== "object") return false;
+  const job = value as Partial<PersistedUploadJob>;
+  return job.version === 1 &&
+    typeof job.runId === "string" &&
+    typeof job.date === "string" &&
+    typeof job.site === "string" &&
+    typeof job.staff === "string" &&
+    Array.isArray(job.assetIds) &&
+    job.assetIds.length > 0 &&
+    job.assetIds.length <= 100 &&
+    job.assetIds.every((assetId) => typeof assetId === "string") &&
+    typeof job.createdAt === "string";
+};
+
 const localDateString = () => {
   const now = new Date();
   const offset = now.getTimezoneOffset() * 60_000;
@@ -58,11 +86,32 @@ export default function App() {
   const [uploadPhase, setUploadPhase] = useState("");
   const [uploadResult, setUploadResult] = useState<StagingUploadResult | null>(null);
   const [pendingRun, setPendingRun] = useState<PendingStagingRun | null>(null);
+  const [persistedJob, setPersistedJob] = useState<PersistedUploadJob | null>(null);
+  const [isResuming, setIsResuming] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    AsyncStorage.getItem(UPLOAD_JOB_STORAGE_KEY)
+      .then((stored) => {
+        if (!stored) return;
+        const parsed: unknown = JSON.parse(stored);
+        if (!isPersistedUploadJob(parsed)) {
+          return AsyncStorage.removeItem(UPLOAD_JOB_STORAGE_KEY);
+        }
+        setPersistedJob(parsed);
+        setCleaningDate(parsed.date);
+        setSiteName(parsed.site);
+        setStaffName(parsed.staff);
+        setResult({ assetIds: parsed.assetIds, dismissalMs: 0 });
+        setPickerName("中断した送信から復帰");
+        setUploadPhase("未完了の送信があります。パスワードを入力して再開してください。");
+      })
+      .catch(() => setError("中断データを読み込めませんでした。"));
+  }, []);
 
   const openPicker = async (useSystemPicker: boolean) => {
     setError("");
-    if (pendingRun) {
+    if (pendingRun || persistedJob) {
       setError("先に検証S3の写真を確認して削除してください。");
       return;
     }
@@ -127,10 +176,21 @@ export default function App() {
     setIsUploading(true);
     setUploadPhase("検証環境へログイン中…");
     const runId = `ios-${Date.now()}`;
+    const uploadJob: PersistedUploadJob = {
+      version: 1,
+      runId,
+      date,
+      site,
+      staff,
+      assetIds: result.assetIds,
+      createdAt: new Date().toISOString(),
+    };
     let token = "";
     let keepUploadedPhotos = false;
     let nativeResult: PhotoUploadResult | null = null;
     try {
+      await AsyncStorage.setItem(UPLOAD_JOB_STORAGE_KEY, JSON.stringify(uploadJob));
+      setPersistedJob(uploadJob);
       const loginResponse = await fetch(`${STAGING_API_URL}/api/mobile/login`, {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -216,6 +276,10 @@ export default function App() {
             { method: "DELETE", headers: { authorization: `Bearer ${token}` } },
           );
           keepUploadedPhotos = !cleanupResponse.ok;
+          if (cleanupResponse.ok) {
+            await AsyncStorage.removeItem(UPLOAD_JOB_STORAGE_KEY);
+            setPersistedJob(null);
+          }
         } catch {
           keepUploadedPhotos = true;
         }
@@ -226,6 +290,139 @@ export default function App() {
         );
       }
       setIsUploading(false);
+    }
+  };
+
+  const resumeInterruptedUpload = async () => {
+    if (
+      !persistedJob ||
+      !stagingPassword ||
+      isResuming ||
+      !FastPhotoPicker
+    ) return;
+    setError("");
+    setIsResuming(true);
+    setUploadResult(null);
+    setUploadPhase("検証環境へ再ログイン中…");
+    try {
+      const loginResponse = await fetch(`${STAGING_API_URL}/api/mobile/login`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ password: stagingPassword }),
+      });
+      const loginBody = await loginResponse.json();
+      if (!loginResponse.ok || !loginBody.token) {
+        throw new Error(loginBody.error || "検証環境へログインできませんでした");
+      }
+      const token = loginBody.token as string;
+      const allFiles = persistedJob.assetIds.map((_, index) => ({
+        filename: `${String(index + 1).padStart(3, "0")}.jpg`,
+      }));
+
+      setUploadPhase("中断前に保存できた写真を確認中…");
+      const beforeResponse = await fetch(
+        `${STAGING_API_URL}/api/mobile-test/runs/${persistedJob.runId}`,
+        { headers: { authorization: `Bearer ${token}` } },
+      );
+      const beforeBody = await beforeResponse.json();
+      if (!beforeResponse.ok) {
+        throw new Error(beforeBody.error || "中断データを確認できませんでした");
+      }
+      const storedBefore = new Set<string>(beforeBody.filenames || []);
+      const missingBefore = allFiles
+        .map((file, index) => (storedBefore.has(file.filename) ? -1 : index))
+        .filter((index) => index >= 0);
+
+      let resumeResult: PhotoUploadResult = {
+        requestedCount: persistedJob.assetIds.length,
+        uploadedCount: beforeBody.photoCount,
+        failedCount: missingBefore.length,
+        preparationMs: 0,
+        uploadMs: 0,
+        totalMs: 0,
+        uploadedBytes: beforeBody.totalBytes,
+        firstError: "",
+        failedIndexes: missingBefore,
+        automaticRetryCount: 0,
+      };
+
+      if (missingBefore.length) {
+        setUploadPhase(`${missingBefore.length}枚の再開用URLを取得中…`);
+        const missingFiles = missingBefore.map((index) => allFiles[index]);
+        const signedResponse = await fetch(
+          `${STAGING_API_URL}/api/mobile-test/presigned-urls`,
+          {
+            method: "POST",
+            headers: {
+              authorization: `Bearer ${token}`,
+              "content-type": "application/json",
+            },
+            body: JSON.stringify({
+              runId: persistedJob.runId,
+              date: persistedJob.date,
+              site: persistedJob.site,
+              staff: persistedJob.staff,
+              files: missingFiles,
+            }),
+          },
+        );
+        const signedBody = await signedResponse.json();
+        if (!signedResponse.ok || !Array.isArray(signedBody)) {
+          throw new Error(signedBody.error || "再開用URLを取得できませんでした");
+        }
+        setUploadPhase(`未送信の${missingBefore.length}枚だけを再開中…`);
+        resumeResult = await FastPhotoPicker.prepareAndUploadPhotos(
+          missingBefore.map((index) => persistedJob.assetIds[index]),
+          signedBody.map((target: { uploadUrl: string }) => target.uploadUrl),
+          720,
+          0.45,
+          "none",
+        );
+      }
+
+      setUploadPhase("再開後の保存内容を照合中…");
+      const verifyResponse = await fetch(
+        `${STAGING_API_URL}/api/mobile-test/runs/${persistedJob.runId}`,
+        { headers: { authorization: `Bearer ${token}` } },
+      );
+      const verifyBody = await verifyResponse.json();
+      if (!verifyResponse.ok) {
+        throw new Error(verifyBody.error || "再開後の保存内容を確認できませんでした");
+      }
+      const storedAfter = new Set<string>(verifyBody.filenames || []);
+      const remainingIndexes = allFiles
+        .map((file, index) => (storedAfter.has(file.filename) ? -1 : index))
+        .filter((index) => index >= 0);
+      setPendingRun({
+        runId: persistedJob.runId,
+        token,
+        failedIndexes: remainingIndexes,
+      });
+      setUploadResult({
+        ...resumeResult,
+        requestedCount: persistedJob.assetIds.length,
+        uploadedCount: verifyBody.photoCount,
+        failedCount: remainingIndexes.length,
+        uploadedBytes: verifyBody.totalBytes,
+        failedIndexes: remainingIndexes,
+        date: persistedJob.date,
+        site: persistedJob.site,
+        staff: persistedJob.staff,
+        verifiedCount: verifyBody.photoCount,
+        verifiedBytes: verifyBody.totalBytes,
+        manualRetryRounds: missingBefore.length ? 1 : 0,
+      });
+      setStagingPassword("");
+      setUploadPhase(
+        remainingIndexes.length
+          ? `再開後も${remainingIndexes.length}枚が未送信です`
+          : "中断復帰完了・100枚の保存確認済み（確認後に削除してください）",
+      );
+    } catch (resumeError) {
+      setError(resumeError instanceof Error ? resumeError.message : String(resumeError));
+      setUploadPhase("中断復帰に失敗しました（もう一度再開できます）");
+    } finally {
+      setIsResuming(false);
     }
   };
 
@@ -345,6 +542,8 @@ export default function App() {
         current ? { ...current, deletedCount: body.deletedCount } : current,
       );
       setPendingRun(null);
+      await AsyncStorage.removeItem(UPLOAD_JOB_STORAGE_KEY);
+      setPersistedJob(null);
       setUploadPhase("完了（検証写真は削除済み）");
     } catch (deleteError) {
       setError(deleteError instanceof Error ? deleteError.message : String(deleteError));
@@ -372,7 +571,7 @@ export default function App() {
             onChangeText={setCleaningDate}
             placeholder="YYYY-MM-DD"
             autoCapitalize="none"
-            editable={!isUploading && !pendingRun}
+            editable={!isUploading && !pendingRun && !persistedJob}
           />
           <Text style={styles.fieldLabel}>現場名</Text>
           <TextInput
@@ -380,7 +579,7 @@ export default function App() {
             value={siteName}
             onChangeText={setSiteName}
             placeholder="例：テスト現場"
-            editable={!isUploading && !pendingRun}
+            editable={!isUploading && !pendingRun && !persistedJob}
           />
           <Text style={styles.fieldLabel}>担当者名</Text>
           <TextInput
@@ -388,7 +587,7 @@ export default function App() {
             value={staffName}
             onChangeText={setStaffName}
             placeholder="例：田中"
-            editable={!isUploading && !pendingRun}
+            editable={!isUploading && !pendingRun && !persistedJob}
           />
           <View style={styles.simulationRow}>
             <View style={styles.simulationText}>
@@ -400,7 +599,7 @@ export default function App() {
             <Switch
               value={simulateUploadFailures}
               onValueChange={setSimulateUploadFailures}
-              disabled={isUploading || !!pendingRun}
+              disabled={isUploading || !!pendingRun || !!persistedJob}
             />
           </View>
         </View>
@@ -448,25 +647,38 @@ export default function App() {
               secureTextEntry
               autoCapitalize="none"
               autoCorrect={false}
-              editable={!isUploading}
+              editable={!isUploading && !isResuming}
             />
-            <Pressable
-              style={[styles.button, styles.benchmarkButton, isUploading && styles.disabledButton]}
-              onPress={uploadToStaging}
-              disabled={
-                isUploading ||
-                !!pendingRun ||
-                !stagingPassword ||
-                !cleaningDate.trim() ||
-                !siteName.trim() ||
-                !staffName.trim() ||
-                result.assetIds.length === 0
-              }
-            >
-              <Text style={styles.buttonText}>
-                {isUploading ? "実送信処理中…" : "選択写真を検証S3へ実送信"}
-              </Text>
-            </Pressable>
+            {persistedJob && !pendingRun && !isUploading ? (
+              <Pressable
+                style={[styles.button, styles.resumeButton, isResuming && styles.disabledButton]}
+                onPress={resumeInterruptedUpload}
+                disabled={isResuming || !stagingPassword}
+              >
+                <Text style={styles.buttonText}>
+                  {isResuming ? "未完了の送信を再開中…" : "未完了の送信を再開"}
+                </Text>
+              </Pressable>
+            ) : (
+              <Pressable
+                style={[styles.button, styles.benchmarkButton, isUploading && styles.disabledButton]}
+                onPress={uploadToStaging}
+                disabled={
+                  isUploading ||
+                  !!pendingRun ||
+                  !!persistedJob ||
+                  !stagingPassword ||
+                  !cleaningDate.trim() ||
+                  !siteName.trim() ||
+                  !staffName.trim() ||
+                  result.assetIds.length === 0
+                }
+              >
+                <Text style={styles.buttonText}>
+                  {isUploading ? "実送信処理中…" : "選択写真を検証S3へ実送信"}
+                </Text>
+              </Pressable>
+            )}
             {!!uploadPhase && <Text style={styles.phase}>{uploadPhase}</Text>}
             {uploadResult && (
               <View style={styles.preparationResult}>
@@ -602,6 +814,7 @@ const styles = StyleSheet.create({
   uploadHeading: { marginTop: 22, fontWeight: "700", color: "#36564e" },
   deleteButton: { marginTop: 14, backgroundColor: "#9b2c2c" },
   retryButton: { marginTop: 14, backgroundColor: "#9a6700" },
+  resumeButton: { marginTop: 16, backgroundColor: "#1d4f91" },
   phase: { marginTop: 12, color: "#36564e", fontSize: 15, textAlign: "center" },
   error: { marginTop: 20, color: "#b42318", fontSize: 15 },
 });
