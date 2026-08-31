@@ -404,12 +404,15 @@ private final class PhotoGridViewController: UIViewController,
   var onComplete: (([String], Date) -> Void)?
 
   private let limit: Int
+  private let columnCount: CGFloat = 3
+  private let gridSpacing: CGFloat = 2
   private let imageManager = PHCachingImageManager()
   private var assets: PHFetchResult<PHAsset>!
   private var selectedIds: [String] = []
   private var collectionView: UICollectionView!
   private var dragShouldSelect = true
   private var dragVisitedIds: Set<String> = []
+  private var lastDragItem: Int?
   private var latestDragLocation = CGPoint.zero
   private var autoScrollDisplayLink: CADisplayLink?
   private lazy var selectionPanGesture = UIPanGestureRecognizer(
@@ -450,8 +453,8 @@ private final class PhotoGridViewController: UIViewController,
     assets = PHAsset.fetchAssets(with: .image, options: options)
 
     let layout = UICollectionViewFlowLayout()
-    layout.minimumInteritemSpacing = 2
-    layout.minimumLineSpacing = 2
+    layout.minimumInteritemSpacing = gridSpacing
+    layout.minimumLineSpacing = gridSpacing
     collectionView = UICollectionView(frame: .zero, collectionViewLayout: layout)
     collectionView.backgroundColor = .systemBackground
     collectionView.dataSource = self
@@ -493,6 +496,7 @@ private final class PhotoGridViewController: UIViewController,
       let identifier = assets.object(at: indexPath.item).localIdentifier
       dragShouldSelect = !selectedIds.contains(identifier)
       dragVisitedIds.removeAll(keepingCapacity: true)
+      lastDragItem = nil
       applyDragSelection(at: indexPath)
       startAutoScroll()
     case .changed:
@@ -500,6 +504,7 @@ private final class PhotoGridViewController: UIViewController,
     case .ended, .cancelled, .failed:
       stopAutoScroll()
       dragVisitedIds.removeAll(keepingCapacity: true)
+      lastDragItem = nil
     default:
       break
     }
@@ -511,6 +516,19 @@ private final class PhotoGridViewController: UIViewController,
   }
 
   private func applyDragSelection(at indexPath: IndexPath) {
+    if let lastDragItem, lastDragItem != indexPath.item {
+      let direction = lastDragItem < indexPath.item ? 1 : -1
+      var item = lastDragItem + direction
+      while item != indexPath.item {
+        applySelection(at: IndexPath(item: item, section: indexPath.section))
+        item += direction
+      }
+    }
+    applySelection(at: indexPath)
+    lastDragItem = indexPath.item
+  }
+
+  private func applySelection(at indexPath: IndexPath) {
     let identifier = assets.object(at: indexPath.item).localIdentifier
     guard dragVisitedIds.insert(identifier).inserted else { return }
 
@@ -579,7 +597,7 @@ private final class PhotoGridViewController: UIViewController,
     ) as! PhotoCell
     let asset = assets.object(at: indexPath.item)
     let scale = UIScreen.main.scale
-    let side = floor((collectionView.bounds.width - 6) / 4) * scale
+    let side = photoSide(in: collectionView) * scale
     cell.representedAssetIdentifier = asset.localIdentifier
     cell.setSelectionNumber(selectedIds.firstIndex(of: asset.localIdentifier).map { $0 + 1 })
     imageManager.requestImage(
@@ -599,8 +617,13 @@ private final class PhotoGridViewController: UIViewController,
     layout collectionViewLayout: UICollectionViewLayout,
     sizeForItemAt indexPath: IndexPath
   ) -> CGSize {
-    let side = floor((collectionView.bounds.width - 6) / 4)
+    let side = photoSide(in: collectionView)
     return CGSize(width: side, height: side)
+  }
+
+  private func photoSide(in collectionView: UICollectionView) -> CGFloat {
+    let totalSpacing = gridSpacing * (columnCount - 1)
+    return floor((collectionView.bounds.width - totalSpacing) / columnCount)
   }
 
   func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
