@@ -565,7 +565,7 @@ export default function App() {
       <ScrollView contentContainerStyle={styles.container}>
         <Text style={styles.title}>TOCORO. 写真選択テスト</Text>
         <Text style={styles.description}>
-          写真本体を読み込む前に、PhotoKitの写真IDだけを選択します。
+          写真本体を読み込む前に、端末内の写真IDだけを選択します。
           標準版と独自版で、操作性と100枚選択後の復帰時間を比較してください。
         </Text>
 
