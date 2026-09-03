@@ -28,7 +28,7 @@ export type PhotoUploadResult = {
 };
 
 type FastPhotoPickerModule = {
-  pickPhotos(limit: number): Promise<PhotoPickerResult>;
+  pickPhotos(limit: number, categoryName: string): Promise<PhotoPickerResult>;
   pickPhotosWithSystemPicker(limit: number): Promise<PhotoPickerResult>;
   preparePhotos(
     assetIds: string[],

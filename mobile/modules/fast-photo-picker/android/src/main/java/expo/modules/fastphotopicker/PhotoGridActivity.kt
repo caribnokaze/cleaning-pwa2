@@ -78,10 +78,12 @@ class PhotoGridActivity : Activity() {
       setOnClickListener { setResult(RESULT_CANCELED); finish() }
     }
     val title = TextView(this).apply {
-      text = "写真を選択"
-      textSize = 19f
+      text = intent.getStringExtra(EXTRA_CATEGORY_NAME)?.takeIf { it.isNotBlank() }
+        ?: "写真を選択"
+      textSize = 16f
       setTextColor(Color.rgb(30, 41, 38))
       gravity = Gravity.CENTER
+      maxLines = 2
     }
     doneButton = Button(this).apply {
       text = "完了 (0)"
@@ -338,6 +340,7 @@ class PhotoGridActivity : Activity() {
 
   companion object {
     const val EXTRA_LIMIT = "limit"
+    const val EXTRA_CATEGORY_NAME = "categoryName"
     const val RESULT_ASSET_IDS = "assetIds"
     const val RESULT_COMPLETED_AT = "completedAt"
     private const val REQUEST_PERMISSION = 4901

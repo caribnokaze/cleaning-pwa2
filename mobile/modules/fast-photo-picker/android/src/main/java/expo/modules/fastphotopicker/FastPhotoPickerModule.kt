@@ -32,8 +32,8 @@ class FastPhotoPickerModule : Module() {
   override fun definition() = ModuleDefinition {
     Name("FastPhotoPicker")
 
-    AsyncFunction("pickPhotos") { limit: Int, promise: Promise ->
-      launchCustomPicker(limit, promise)
+    AsyncFunction("pickPhotos") { limit: Int, categoryName: String, promise: Promise ->
+      launchCustomPicker(limit, categoryName, promise)
     }
 
     AsyncFunction("pickPhotosWithSystemPicker") { limit: Int, promise: Promise ->
@@ -181,7 +181,7 @@ class FastPhotoPickerModule : Module() {
     }
   }
 
-  private fun launchCustomPicker(limit: Int, promise: Promise) {
+  private fun launchCustomPicker(limit: Int, categoryName: String, promise: Promise) {
     val activity = appContext.currentActivity
     if (activity == null) {
       promise.reject("ERR_NO_ACTIVITY", "写真選択画面を表示できません", null)
@@ -196,6 +196,7 @@ class FastPhotoPickerModule : Module() {
     activity.startActivityForResult(
       Intent(activity, PhotoGridActivity::class.java).apply {
         putExtra(PhotoGridActivity.EXTRA_LIMIT, limit.coerceIn(1, 100))
+        putExtra(PhotoGridActivity.EXTRA_CATEGORY_NAME, categoryName)
       },
       REQUEST_CUSTOM_PICKER
     )

@@ -28,6 +28,8 @@ type StagingUploadResult = PhotoUploadResult & {
   date: string;
   site: string;
   staff: string;
+  categoryId: string;
+  categoryLabel: string;
   verifiedCount: number;
   verifiedBytes: number;
   deletedCount?: number;
@@ -41,25 +43,48 @@ type PendingStagingRun = {
 };
 
 type PersistedUploadJob = {
-  version: 1;
+  version: 2;
   runId: string;
   date: string;
   site: string;
   staff: string;
+  categoryId: string;
   assetIds: string[];
   createdAt: string;
 };
 
 const UPLOAD_JOB_STORAGE_KEY = "tocoro.mobile-staging.pending-upload.v1";
 
+const PHOTO_CATEGORIES = [
+  { id: "photos_amenity", label: "タオル・歯ブラシ・Wi-Fi・Netflix" },
+  { id: "photos_general", label: "その他全般" },
+  { id: "photos_kitchen", label: "キッチン" },
+  { id: "photos_bath", label: "お風呂／洗面／トイレ" },
+  { id: "photos_living", label: "リビング" },
+  { id: "photos_bedroom", label: "寝室" },
+  { id: "photos_hallway", label: "廊下" },
+  { id: "photos_equipment", label: "エアコン本体／照明／Wi-Fi／鍵" },
+  { id: "photos_others", label: "物件指定の清掃" },
+  { id: "regular_1", label: "定期：リビング" },
+  { id: "regular_2", label: "定期：寝室" },
+  { id: "regular_3", label: "定期：キッチン" },
+  { id: "regular_4", label: "定期：水回り" },
+  { id: "regular_5", label: "定期：窓建具" },
+  { id: "regular_6", label: "定期：屋外" },
+  { id: "regular_7", label: "定期：場所横断" },
+  { id: "regular_8", label: "定期：その他" },
+  { id: "photos_filter", label: "フィルター" },
+] as const;
+
 const isPersistedUploadJob = (value: unknown): value is PersistedUploadJob => {
   if (!value || typeof value !== "object") return false;
   const job = value as Partial<PersistedUploadJob>;
-  return job.version === 1 &&
+  return job.version === 2 &&
     typeof job.runId === "string" &&
     typeof job.date === "string" &&
     typeof job.site === "string" &&
     typeof job.staff === "string" &&
+    PHOTO_CATEGORIES.some((category) => category.id === job.categoryId) &&
     Array.isArray(job.assetIds) &&
     job.assetIds.length > 0 &&
     job.assetIds.length <= 100 &&
@@ -82,6 +107,7 @@ export default function App() {
   const [cleaningDate, setCleaningDate] = useState(localDateString);
   const [siteName, setSiteName] = useState("");
   const [staffName, setStaffName] = useState("");
+  const [selectedCategoryId, setSelectedCategoryId] = useState("");
   const [isUploading, setIsUploading] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isRetrying, setIsRetrying] = useState(false);
@@ -105,6 +131,7 @@ export default function App() {
         setCleaningDate(parsed.date);
         setSiteName(parsed.site);
         setStaffName(parsed.staff);
+        setSelectedCategoryId(parsed.categoryId);
         setResult({ assetIds: parsed.assetIds, dismissalMs: 0 });
         setPickerName("中断した送信から復帰");
         setUploadPhase("未完了の送信があります。パスワードを入力して再開してください。");
@@ -114,6 +141,13 @@ export default function App() {
 
   const openPicker = async (useSystemPicker: boolean) => {
     setError("");
+    const selectedCategory = PHOTO_CATEGORIES.find(
+      (category) => category.id === selectedCategoryId,
+    );
+    if (!selectedCategory) {
+      setError("先に写真カテゴリーを選択してください。");
+      return;
+    }
     if (pendingRun || persistedJob) {
       setError("先に検証S3の写真を確認して削除してください。");
       return;
@@ -128,7 +162,7 @@ export default function App() {
     try {
       const nextResult = useSystemPicker
         ? await FastPhotoPicker.pickPhotosWithSystemPicker(100)
-        : await FastPhotoPicker.pickPhotos(100);
+        : await FastPhotoPicker.pickPhotos(100, selectedCategory.label);
       setPickerName(
         useSystemPicker
           ? Platform.OS === "android"
@@ -176,6 +210,9 @@ export default function App() {
     const date = cleaningDate.trim();
     const site = siteName.trim();
     const staff = staffName.trim();
+    const selectedCategory = PHOTO_CATEGORIES.find(
+      (category) => category.id === selectedCategoryId,
+    );
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
       setError("撮影日は YYYY-MM-DD 形式で入力してください。");
       return;
@@ -184,17 +221,22 @@ export default function App() {
       setError("現場名と担当者名を入力してください（/ と \\ は使用できません）。");
       return;
     }
+    if (!selectedCategory) {
+      setError("写真カテゴリーを選択してください。");
+      return;
+    }
     setError("");
     setUploadResult(null);
     setIsUploading(true);
     setUploadPhase("検証環境へログイン中…");
     const runId = `${Platform.OS}-${Date.now()}`;
     const uploadJob: PersistedUploadJob = {
-      version: 1,
+      version: 2,
       runId,
       date,
       site,
       staff,
+      categoryId: selectedCategory.id,
       assetIds: result.assetIds,
       createdAt: new Date().toISOString(),
     };
@@ -268,6 +310,8 @@ export default function App() {
         date,
         site,
         staff,
+        categoryId: selectedCategory.id,
+        categoryLabel: selectedCategory.label,
         verifiedCount: verifyBody.photoCount,
         verifiedBytes: verifyBody.totalBytes,
         manualRetryRounds: 0,
@@ -425,6 +469,10 @@ export default function App() {
         date: persistedJob.date,
         site: persistedJob.site,
         staff: persistedJob.staff,
+        categoryId: persistedJob.categoryId,
+        categoryLabel:
+          PHOTO_CATEGORIES.find((category) => category.id === persistedJob.categoryId)?.label ||
+          persistedJob.categoryId,
         verifiedCount: verifyBody.photoCount,
         verifiedBytes: verifyBody.totalBytes,
         manualRetryRounds: missingBefore.length ? 1 : 0,
@@ -614,6 +662,39 @@ export default function App() {
             placeholder="例：田中"
             editable={!isUploading && !pendingRun && !persistedJob}
           />
+          <Text style={styles.fieldLabel}>写真カテゴリー</Text>
+          <Text style={styles.categoryInstruction}>
+            カテゴリーを選んでから写真を選択してください。
+          </Text>
+          <View style={styles.categoryGrid}>
+            {PHOTO_CATEGORIES.map((category) => {
+              const selected = selectedCategoryId === category.id;
+              return (
+                <Pressable
+                  key={category.id}
+                  style={[styles.categoryButton, selected && styles.categoryButtonSelected]}
+                  onPress={() => {
+                    setSelectedCategoryId(category.id);
+                    setResult(null);
+                    setPreparation(null);
+                    setUploadResult(null);
+                  }}
+                  disabled={isUploading || !!pendingRun || !!persistedJob}
+                  accessibilityRole="radio"
+                  accessibilityState={{ checked: selected }}
+                >
+                  <Text
+                    style={[
+                      styles.categoryButtonText,
+                      selected && styles.categoryButtonTextSelected,
+                    ]}
+                  >
+                    {category.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
           <View style={styles.simulationRow}>
             <View style={styles.simulationText}>
               <Text style={styles.fieldLabel}>再送機能の試験</Text>
@@ -646,6 +727,10 @@ export default function App() {
         {result && (
           <View style={styles.result}>
             <Text style={styles.resultTitle}>選択結果</Text>
+            <Text style={styles.metric}>
+              カテゴリー：
+              {PHOTO_CATEGORIES.find((category) => category.id === selectedCategoryId)?.label}
+            </Text>
             <Text style={styles.metric}>方式：{pickerName}</Text>
             <Text style={styles.metric}>選択枚数：{result.assetIds.length}枚</Text>
             <Text style={styles.metric}>画面復帰：約{result.dismissalMs}ms</Text>
@@ -723,6 +808,9 @@ export default function App() {
                 <Text style={styles.metric}>撮影日：{uploadResult.date}</Text>
                 <Text style={styles.metric}>現場名：{uploadResult.site}</Text>
                 <Text style={styles.metric}>担当者名：{uploadResult.staff}</Text>
+                <Text style={styles.metric}>
+                  カテゴリー：{uploadResult.categoryLabel}
+                </Text>
                 <Text style={styles.metric}>
                   検証S3で確認：{uploadResult.verifiedCount}枚／
                   {megabytes(uploadResult.verifiedBytes)}MB
@@ -821,6 +909,19 @@ const styles = StyleSheet.create({
     fontSize: 16,
     backgroundColor: "#fff",
   },
+  categoryInstruction: { color: "#60706c", fontSize: 13, marginBottom: 8 },
+  categoryGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  categoryButton: {
+    borderWidth: 1,
+    borderColor: "#aebcb7",
+    borderRadius: 18,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    backgroundColor: "#fff",
+  },
+  categoryButtonSelected: { borderColor: "#16745e", backgroundColor: "#16745e" },
+  categoryButtonText: { color: "#36564e", fontSize: 14, fontWeight: "600" },
+  categoryButtonTextSelected: { color: "#fff" },
   buttonText: { color: "#fff", fontSize: 17, fontWeight: "700" },
   result: { marginTop: 28, padding: 20, borderRadius: 12, backgroundColor: "#fff" },
   resultTitle: { fontSize: 18, fontWeight: "800", marginBottom: 12, color: "#173c33" },

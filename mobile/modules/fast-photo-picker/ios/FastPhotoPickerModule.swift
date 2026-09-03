@@ -9,7 +9,7 @@ public final class FastPhotoPickerModule: Module {
   public func definition() -> ModuleDefinition {
     Name("FastPhotoPicker")
 
-    AsyncFunction("pickPhotos") { (limit: Int, promise: Promise) in
+    AsyncFunction("pickPhotos") { (limit: Int, categoryName: String, promise: Promise) in
       DispatchQueue.main.async {
         PHPhotoLibrary.requestAuthorization(for: .readWrite) { status in
           DispatchQueue.main.async {
@@ -22,7 +22,10 @@ public final class FastPhotoPickerModule: Module {
               return
             }
 
-            let picker = PhotoGridViewController(limit: min(max(limit, 1), 100))
+            let picker = PhotoGridViewController(
+              limit: min(max(limit, 1), 100),
+              categoryName: categoryName
+            )
             let navigation = UINavigationController(rootViewController: picker)
             navigation.modalPresentationStyle = .fullScreen
             picker.onCancel = {
@@ -404,6 +407,7 @@ private final class PhotoGridViewController: UIViewController,
   var onComplete: (([String], Date) -> Void)?
 
   private let limit: Int
+  private let categoryName: String
   private let columnCount: CGFloat = 3
   private let gridSpacing: CGFloat = 2
   private let imageManager = PHCachingImageManager()
@@ -426,8 +430,9 @@ private final class PhotoGridViewController: UIViewController,
     action: #selector(doneTapped)
   )
 
-  init(limit: Int) {
+  init(limit: Int, categoryName: String) {
     self.limit = limit
+    self.categoryName = categoryName
     super.init(nibName: nil, bundle: nil)
   }
 
@@ -437,7 +442,7 @@ private final class PhotoGridViewController: UIViewController,
 
   override func viewDidLoad() {
     super.viewDidLoad()
-    title = "写真を選択"
+    title = categoryName.isEmpty ? "写真を選択" : categoryName
     view.backgroundColor = .systemBackground
     navigationItem.leftBarButtonItem = UIBarButtonItem(
       title: "キャンセル",
