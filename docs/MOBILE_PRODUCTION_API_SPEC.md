@@ -20,6 +20,30 @@ iOS・Android のネイティブ写真ピッカーから、既存の TOCORO 清�
 - 認証トークン、署名付き URL、パスワードをログへ出力しない
 - 既存の S3 キー形式 `date/site/staff/photoId/filename` を維持する
 - 1回の要求と中断復帰単位は最大100枚とする
+- 既存システムとの互換性を保つため、`photoId` は写真カテゴリーIDとして扱う
+
+## 写真カテゴリー
+
+既存Web版では `photoId` が写真ごとの一意なIDではなく、写真カテゴリーを表します。
+初回リリースのアプリでは、利用者がカテゴリーを選んでから、そのカテゴリーに属する
+写真を最大100枚選択します。複数カテゴリーを送る場合は選択操作をカテゴリーごとに
+繰り返します。
+
+許可するカテゴリーIDはサーバー側の固定リストで管理します。例:
+
+- `photos_amenity`
+- `photos_general`
+- `photos_kitchen`
+- `photos_bath`
+- `photos_living`
+- `photos_bedroom`
+- `photos_hallway`
+- `photos_equipment`
+- `photos_others`
+- `regular_1`〜`regular_8`
+- `photos_filter`
+
+アプリから任意のカテゴリーIDを追加することはできません。
 
 ## 認証
 
@@ -65,10 +89,10 @@ iOS Keychain または Android Keystore で保護し、平文のアプリスト�
   "date": "2026-09-03",
   "site": "現場名",
   "staff": "担当者名",
+  "photoId": "photos_general",
   "files": [
     {
       "clientPhotoId": "端末内で一意なID",
-      "filename": "001.jpg",
       "contentType": "image/jpeg",
       "size": 72341
     }
@@ -85,8 +109,8 @@ iOS Keychain または Android Keystore で保護し、平文のアプリスト�
   "files": [
     {
       "clientPhotoId": "端末内で一意なID",
-      "photoId": "サーバーが採番したID",
-      "key": "2026-09-03/現場名/担当者名/photoId/001.jpg",
+      "filename": "mobile_upload-id_001.jpg",
+      "key": "2026-09-03/現場名/担当者名/photos_general/mobile_upload-id_001.jpg",
       "uploadUrl": "S3署名付きURL"
     }
   ]
@@ -97,10 +121,13 @@ iOS Keychain または Android Keystore で保護し、平文のアプリスト�
 
 - `date` は `YYYY-MM-DD`
 - `site` と `staff` は1〜100文字で、`/`、`\\`、NULL文字を禁止
+- `photoId` はサーバー側のカテゴリー許可リストと一致すること
 - ファイルは1〜100件
 - `contentType` は `image/jpeg` のみ
 - 1ファイルおよび要求全体の上限サイズをサーバー側で検証
-- `photoId` と S3 キーはサーバーが決定し、クライアント入力を信用しない
+- S3 キーは検証済みのカテゴリーIDとファイル情報からサーバーが決定する
+- ファイル名はサーバーが `uploadId` と連番から決定し、既存写真を上書きしない
+- `photos_filter` では別途検証した作業時間をファイル名へ付加する
 
 ## 送信完了の確定
 
@@ -113,16 +140,17 @@ iOS Keychain または Android Keystore で保護し、平文のアプリスト�
   "uploadId": "一意なID",
   "photos": [
     {
-      "clientPhotoId": "端末内で一意なID",
-      "photoId": "サーバーが採番したID"
+      "clientPhotoId": "端末内で一意なID"
     }
   ]
 }
 ```
 
 サーバーは S3 オブジェクトの存在、Content-Type、サイズを確認し、確認できた写真
-だけを既存の一覧・ギャラリーへ公開します。同じ `uploadId` と `photoId` の再送は
-同じ結果を返し、重複写真を作らない冪等な処理にします。
+だけを既存の一覧・ギャラリーへ公開します。同じ `uploadId` と `clientPhotoId` の
+再送は同じ保存先と結果を返し、重複写真を作らない冪等な処理にします。
+S3キーはクライアントから再送させず、署名付きURL発行時にサーバーが記録した対応を
+参照します。この対応記録には有効期限を設け、完了後または期限後に削除します。
 
 成功（200）:
 
@@ -145,6 +173,7 @@ iOS Keychain または Android Keystore で保護し、平文のアプリスト�
 
 - `uploadId`
 - 撮影日、現場名、担当者名
+- 写真カテゴリーID
 - iOS PhotoKit ID または Android MediaStore URI
 - `clientPhotoId`、ファイル名、処理状態、再試行回数
 
@@ -200,4 +229,3 @@ iOS Keychain または Android Keystore で保護し、平文のアプリスト�
 - 通信断・アプリ終了後は未完了分だけを送信する
 - アプリ、Git、ログに秘密値や署名付きURLが残らない
 - 検証ビルドに本番URL、本番ビルドに検証用操作が混入しない
-
