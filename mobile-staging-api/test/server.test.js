@@ -25,7 +25,7 @@ test("accepts only isolated staging configuration", () => {
 test("creates expiring authentication tokens", () => {
   const token = createToken(1_000);
   assert.equal(isValidToken(token, 1_001), true);
-  assert.equal(isValidToken(token, 1_000 + 3_601), false);
+  assert.equal(isValidToken(token, 1_061), false);
   assert.equal(isValidToken(`${token}changed`, 1_001), false);
 });
 
