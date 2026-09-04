@@ -168,19 +168,24 @@ function createApp({ s3 = new S3Client({ region: REGION }), signer = getSignedUr
     const attempts = (loginAttempts.get(req.ip) || []).filter(
       (timestamp) => timestamp > now - LOGIN_WINDOW_MS,
     );
+    const rejectRateLimitedLogin = () => {
+      const oldestAttempt = attempts[0] || now;
+      const retryAfterSeconds = Math.max(1, Math.ceil((oldestAttempt + LOGIN_WINDOW_MS - now) / 1000));
+      res.set("Retry-After", String(retryAfterSeconds));
+      return res.status(429).json({
+        error: "ログイン試行回数が上限に達しました",
+        retryAfterSeconds,
+      });
+    };
     if (attempts.length >= MAX_LOGIN_ATTEMPTS) {
       loginAttempts.set(req.ip, attempts);
-      return res.status(429).json({ error: "ログイン試行回数が上限に達しました" });
+      return rejectRateLimitedLogin();
     }
     if (!safeEqual(req.body?.password || "", APP_PASSWORD)) {
       attempts.push(now);
       loginAttempts.set(req.ip, attempts);
-      return res.status(attempts.length >= MAX_LOGIN_ATTEMPTS ? 429 : 401).json({
-        error:
-          attempts.length >= MAX_LOGIN_ATTEMPTS
-            ? "ログイン試行回数が上限に達しました"
-            : "パスワードが違います",
-      });
+      if (attempts.length >= MAX_LOGIN_ATTEMPTS) return rejectRateLimitedLogin();
+      return res.status(401).json({ error: "パスワードが違います" });
     }
     loginAttempts.delete(req.ip);
     const token = createToken();

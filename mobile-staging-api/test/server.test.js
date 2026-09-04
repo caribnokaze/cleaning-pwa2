@@ -96,6 +96,37 @@ test("creates deterministic safe production filenames", () => {
   );
 });
 
+test("returns Retry-After when login attempts reach the limit", async (t) => {
+  const app = createApp();
+  const server = app.listen(0, "127.0.0.1");
+  await new Promise((resolve) => server.once("listening", resolve));
+  t.after(() => server.close());
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+
+  for (let attempt = 1; attempt <= 4; attempt += 1) {
+    const response = await fetch(`${baseUrl}/api/mobile/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ password: "wrong-password" }),
+    });
+    assert.equal(response.status, 401);
+    assert.equal(response.headers.get("retry-after"), null);
+  }
+
+  const limited = await fetch(`${baseUrl}/api/mobile/login`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ password: "wrong-password" }),
+  });
+  assert.equal(limited.status, 429);
+  const retryAfter = Number(limited.headers.get("retry-after"));
+  assert.ok(retryAfter >= 899 && retryAfter <= 900);
+  assert.deepEqual(await limited.json(), {
+    error: "ログイン試行回数が上限に達しました",
+    retryAfterSeconds: retryAfter,
+  });
+});
+
 test("supports the production-shaped authenticated upload flow", async (t) => {
   const storedObjects = [];
   const s3 = {
