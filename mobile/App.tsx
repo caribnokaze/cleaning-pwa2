@@ -1,5 +1,6 @@
 import { StatusBar } from "expo-status-bar";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as SecureStore from "expo-secure-store";
 import { useEffect, useMemo, useState } from "react";
 import { Platform, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import FastPhotoPicker, { PhotoPickerResult } from "./modules/fast-photo-picker/src";
@@ -10,9 +11,11 @@ type Category = { id: string; label: string; hint?: string; group: "normal" | "r
 type UploadCategory = { id: string; runId: string; assetIds: string[] };
 type UploadJob = { version: 1; date: string; site: string; staff: string; workType: WorkType; workTime: string; categories: UploadCategory[]; createdAt: string };
 type UploadSummary = { requested: number; uploaded: number; bytes: number; preparationMs: number; uploadMs: number; automaticRetries: number; deleted?: number };
+type AuthSession = { version: 1; token: string; expiresAt: number };
 
 const STAGING_API_URL = (process.env.EXPO_PUBLIC_MOBILE_STAGING_API_URL || "").replace(/\/$/, "");
 const UPLOAD_JOB_KEY = "tocoro.production-ui.staging-upload.v1";
+const AUTH_SESSION_KEY = "tocoro.production-ui.staging-auth.v1";
 const DECLARED_MAX_COMPRESSED_BYTES = 2 * 1024 * 1024;
 
 const WORK_TYPES: { id: WorkType; label: string }[] = [
@@ -52,6 +55,13 @@ const isUploadJob = (value: unknown): value is UploadJob => {
       Array.isArray(item.assetIds) && item.assetIds.length > 0 && item.assetIds.length <= 100 &&
       item.assetIds.every((assetId) => typeof assetId === "string"));
 };
+const isValidAuthSession = (value: unknown): value is AuthSession => {
+  if (!value || typeof value !== "object") return false;
+  const session = value as Partial<AuthSession>;
+  return session.version === 1 && typeof session.token === "string" && !!session.token &&
+    typeof session.expiresAt === "number" && Number.isFinite(session.expiresAt) &&
+    session.expiresAt > Math.floor(Date.now() / 1000);
+};
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>("login");
@@ -66,7 +76,7 @@ export default function App() {
   const [password, setPassword] = useState("");
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
-  const [isRestoringJob, setIsRestoringJob] = useState(true);
+  const [isRestoringSession, setIsRestoringSession] = useState(true);
   const [uploadJob, setUploadJob] = useState<UploadJob | null>(null);
   const [authToken, setAuthToken] = useState("");
   const [isUploading, setIsUploading] = useState(false);
@@ -75,17 +85,48 @@ export default function App() {
   const [uploadSummary, setUploadSummary] = useState<UploadSummary | null>(null);
 
   useEffect(() => {
-    AsyncStorage.getItem(UPLOAD_JOB_KEY).then((stored) => {
-      if (!stored) return;
-      const parsed: unknown = JSON.parse(stored);
-      if (!isUploadJob(parsed)) return AsyncStorage.removeItem(UPLOAD_JOB_KEY);
-      setUploadJob(parsed);
-      setCleaningDate(parsed.date); setSiteName(parsed.site); setStaffName(parsed.staff);
-      setWorkType(parsed.workType); setWorkTime(parsed.workTime);
-      setSelections(Object.fromEntries(parsed.categories.map((item) => [item.id, { assetIds: item.assetIds, dismissalMs: 0 }])));
-      setUploadPhase("未完了の送信があります。ログイン後に再開できます。");
-    }).catch(() => setError("中断した送信情報を読み込めませんでした。"))
-      .finally(() => setIsRestoringJob(false));
+    const restoreSession = async () => {
+      try {
+        const [storedJob, storedSession] = await Promise.all([
+          AsyncStorage.getItem(UPLOAD_JOB_KEY),
+          SecureStore.getItemAsync(AUTH_SESSION_KEY),
+        ]);
+        let restoredJob: UploadJob | null = null;
+        if (storedJob) {
+          const parsedJob: unknown = JSON.parse(storedJob);
+          if (isUploadJob(parsedJob)) {
+            restoredJob = parsedJob;
+            setUploadJob(parsedJob);
+            setCleaningDate(parsedJob.date); setSiteName(parsedJob.site); setStaffName(parsedJob.staff);
+            setWorkType(parsedJob.workType); setWorkTime(parsedJob.workTime);
+            setSelections(Object.fromEntries(parsedJob.categories.map((item) => [item.id, { assetIds: item.assetIds, dismissalMs: 0 }])));
+          } else {
+            await AsyncStorage.removeItem(UPLOAD_JOB_KEY);
+          }
+        }
+        let restoredSession: AuthSession | null = null;
+        if (storedSession) {
+          const parsedSession: unknown = JSON.parse(storedSession);
+          if (isValidAuthSession(parsedSession)) {
+            restoredSession = parsedSession;
+            setAuthToken(parsedSession.token);
+          } else {
+            await SecureStore.deleteItemAsync(AUTH_SESSION_KEY);
+          }
+        }
+        if (restoredSession) {
+          setScreen(restoredJob ? "review" : "details");
+          if (restoredJob) setUploadPhase("未完了の送信があります。未完了分だけ再開できます。");
+        } else if (restoredJob) {
+          setUploadPhase("未完了の送信があります。ログイン後に再開できます。");
+        }
+      } catch {
+        setError("保存したログイン情報または中断した送信情報を読み込めませんでした。");
+      } finally {
+        setIsRestoringSession(false);
+      }
+    };
+    void restoreSession();
   }, []);
 
   const visibleCategories = useMemo(() => CATEGORIES.filter((category) =>
@@ -122,13 +163,20 @@ export default function App() {
       method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ password }),
     });
     const body = await response.json();
-    if (!response.ok || !body.token) throw new Error(body.error || "検証環境へログインできませんでした");
-    return body.token as string;
+    if (!response.ok || !body.token || !Number.isFinite(body.expiresAt)) throw new Error(body.error || "検証環境へログインできませんでした");
+    return { version: 1, token: body.token, expiresAt: body.expiresAt } satisfies AuthSession;
+  };
+
+  const clearAuthSession = async () => {
+    await SecureStore.deleteItemAsync(AUTH_SESSION_KEY);
+    setAuthToken("");
   };
 
   const requireValidSession = (response: Response) => {
     if (response.status !== 401) return;
-    setAuthToken(""); setScreen("login");
+    setAuthToken("");
+    void SecureStore.deleteItemAsync(AUTH_SESSION_KEY).catch(() => undefined);
+    setScreen("login");
     throw new Error("ログインの有効期限が切れました。もう一度ログインしてください。");
   };
 
@@ -136,13 +184,28 @@ export default function App() {
     if (!password || isLoggingIn || !STAGING_API_URL) return;
     setError(""); setIsLoggingIn(true);
     try {
-      const token = await authenticate();
-      setAuthToken(token); setPassword(""); setPasswordVisible(false);
+      const session = await authenticate();
+      await SecureStore.setItemAsync(AUTH_SESSION_KEY, JSON.stringify(session), {
+        keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY,
+      });
+      setAuthToken(session.token); setPassword(""); setPasswordVisible(false);
       setScreen(uploadJob ? "review" : "details");
     } catch (loginError) {
       setError(loginError instanceof Error ? loginError.message : String(loginError));
     } finally {
       setIsLoggingIn(false);
+    }
+  };
+
+  const logout = async () => {
+    if (isUploading || isDeleting || isLoggingIn) return;
+    setError("");
+    try {
+      await clearAuthSession();
+      setPassword(""); setPasswordVisible(false); setScreen("login");
+      if (uploadJob) setUploadPhase("未完了の送信があります。ログイン後に再開できます。");
+    } catch {
+      setError("ログアウト情報を端末から削除できませんでした。");
     }
   };
 
@@ -238,7 +301,7 @@ export default function App() {
         deleted += body.deletedCount || 0;
       }
       setUploadSummary((current) => current ? { ...current, deleted } : current);
-      await AsyncStorage.removeItem(UPLOAD_JOB_KEY); setUploadJob(null); setAuthToken("");
+      await AsyncStorage.removeItem(UPLOAD_JOB_KEY); setUploadJob(null);
       setUploadPhase(`検証S3から削除：${deleted}枚`);
     } catch (deleteError) { setError(deleteError instanceof Error ? deleteError.message : String(deleteError)); setUploadPhase("削除できませんでした。再ログインして再開してください。"); }
     finally { setIsDeleting(false); }
@@ -247,7 +310,7 @@ export default function App() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar style="dark" />
-      <View style={styles.header}><Text style={styles.brand}>TOCORO.</Text><Text style={styles.headerTitle}>清掃写真報告</Text></View>
+      <View style={styles.header}><Text style={styles.brand}>TOCORO.</Text><Text style={styles.headerTitle}>清掃写真報告</Text>{screen !== "login" && <Pressable style={styles.logoutButton} onPress={logout} disabled={isUploading || isDeleting}><Text style={styles.logoutText}>ログアウト</Text></Pressable>}</View>
       {screen !== "login" && <View style={styles.steps}>
         {(["details", "photos", "review"] as Screen[]).map((step, index) => (
           <View key={step} style={styles.stepItem}>
@@ -264,7 +327,7 @@ export default function App() {
           {!!uploadJob && <View style={styles.notice}><Text style={styles.noticeTitle}>未完了の送信があります</Text><Text style={styles.noticeText}>ログイン後、確認画面から未完了分だけ再開できます。</Text></View>}
           <TextInput style={styles.passwordInput} value={password} onChangeText={setPassword} placeholder="検証環境のパスワード" secureTextEntry={!passwordVisible} autoCapitalize="none" autoCorrect={false} editable={!isLoggingIn} onSubmitEditing={submitLogin} />
           <View style={styles.passwordHelp}><Text style={styles.passwordCount}>{password.length ? `入力済み：${password.length}文字` : "未入力"}</Text><Pressable onPress={() => setPasswordVisible((visible) => !visible)} disabled={isLoggingIn}><Text style={styles.passwordToggle}>{passwordVisible ? "隠す" : "表示する"}</Text></Pressable></View>
-          <PrimaryButton label={isRestoringJob ? "送信状態を確認中…" : isLoggingIn ? "ログイン中…" : "ログイン"} onPress={submitLogin} disabled={!password || isLoggingIn || isRestoringJob || !STAGING_API_URL} />
+          <PrimaryButton label={isRestoringSession ? "ログイン状態を確認中…" : isLoggingIn ? "ログイン中…" : "ログイン"} onPress={submitLogin} disabled={!password || isLoggingIn || isRestoringSession || !STAGING_API_URL} />
         </>}
 
         {screen === "details" && <>
@@ -352,9 +415,11 @@ function ReviewLine({ label, value, strong }: { label: string; value: string; st
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: "#f5f7f6" },
-  header: { paddingHorizontal: 20, paddingTop: 12, paddingBottom: 10, flexDirection: "row", alignItems: "baseline", backgroundColor: "#fff", borderBottomWidth: 1, borderBottomColor: "#dce4e1" },
+  header: { paddingHorizontal: 20, paddingTop: 12, paddingBottom: 10, flexDirection: "row", alignItems: "center", backgroundColor: "#fff", borderBottomWidth: 1, borderBottomColor: "#dce4e1" },
   brand: { fontSize: 23, fontWeight: "900", color: "#12634f", marginRight: 10 },
-  headerTitle: { fontSize: 16, fontWeight: "700", color: "#36564e" },
+  headerTitle: { flex: 1, fontSize: 16, fontWeight: "700", color: "#36564e" },
+  logoutButton: { paddingVertical: 7, paddingHorizontal: 9, borderRadius: 8, borderWidth: 1, borderColor: "#9db0aa" },
+  logoutText: { color: "#36564e", fontSize: 12, fontWeight: "800" },
   steps: { flexDirection: "row", justifyContent: "space-around", paddingVertical: 12, backgroundColor: "#fff" },
   stepItem: { flexDirection: "row", alignItems: "center" },
   stepCircle: { width: 24, height: 24, borderRadius: 12, alignItems: "center", justifyContent: "center", backgroundColor: "#e4ebe8", marginRight: 6 },
