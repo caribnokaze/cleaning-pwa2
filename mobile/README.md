@@ -84,6 +84,10 @@ EXPO_PUBLIC_MOBILE_STAGING_API_URL=https://your-staging-api.example
 `_system/mobile-test/production-contract/`配下に固定され、本番へは送信しません。
 確認後の即時削除だけは検証専用APIを使用します。
 
+共通パスワードはアプリ起動時のログイン画面で入力します。ログイン成功後は入力値を
+メモリから消去し、AsyncStorageへ保存しません。現在の段階では認証トークンも
+メモリだけに保持するため、アプリを完全終了した場合は再ログインが必要です。
+
 ## 中断復帰
 
 送信開始前に、実行ID・写真ID・撮影日・現場名・担当者名を端末へ保存します。
