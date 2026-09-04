@@ -25,7 +25,8 @@ test("accepts only isolated staging configuration", () => {
 test("creates expiring authentication tokens", () => {
   const token = createToken(1_000);
   assert.equal(isValidToken(token, 1_001), true);
-  assert.equal(isValidToken(token, 1_061), false);
+  assert.equal(isValidToken(token, 260_199), true);
+  assert.equal(isValidToken(token, 260_201), false);
   assert.equal(isValidToken(`${token}changed`, 1_001), false);
 });
 
@@ -120,7 +121,7 @@ test("returns Retry-After when login attempts reach the limit", async (t) => {
   });
   assert.equal(limited.status, 429);
   const retryAfter = Number(limited.headers.get("retry-after"));
-  assert.ok(retryAfter >= 59 && retryAfter <= 60);
+  assert.ok(retryAfter >= 599 && retryAfter <= 600);
   assert.deepEqual(await limited.json(), {
     error: "ログイン試行回数が上限に達しました",
     retryAfterSeconds: retryAfter,
