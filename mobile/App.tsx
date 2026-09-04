@@ -349,8 +349,8 @@ export default function App() {
           <Text style={styles.title}>ログイン</Text>
           <Text style={styles.description}>清掃写真報告を始めるため、共通パスワードを入力してください。パスワードは端末へ保存しません。</Text>
           {!!uploadJob && <View style={styles.notice}><Text style={styles.noticeTitle}>未完了の送信があります</Text><Text style={styles.noticeText}>ログイン後、確認画面から未完了分だけ再開できます。</Text></View>}
-          <TextInput style={styles.passwordInput} value={password} onChangeText={setPassword} placeholder="検証環境のパスワード" secureTextEntry={!passwordVisible} autoCapitalize="none" autoCorrect={false} editable={!isLoggingIn} onSubmitEditing={submitLogin} />
-          <View style={styles.passwordHelp}><Text style={styles.passwordCount}>{password.length ? `入力済み：${password.length}文字` : "未入力"}</Text><Pressable onPress={() => setPasswordVisible((visible) => !visible)} disabled={isLoggingIn}><Text style={styles.passwordToggle}>{passwordVisible ? "隠す" : "表示する"}</Text></Pressable></View>
+          <TextInput style={styles.passwordInput} value={password} onChangeText={setPassword} placeholder={IS_PRODUCTION ? "パスワード" : "検証環境のパスワード"} secureTextEntry={!passwordVisible} autoCapitalize="none" autoCorrect={false} editable={!isLoggingIn} onSubmitEditing={submitLogin} />
+          {IS_PRODUCTION && <View style={styles.passwordHelp}><Pressable onPress={() => setPasswordVisible((visible) => !visible)} disabled={isLoggingIn}><Text style={styles.passwordToggle}>{passwordVisible ? "隠す" : "表示する"}</Text></Pressable></View>}
           {!!BUILD_CONFIGURATION_ERROR && <Text style={styles.error}>{BUILD_CONFIGURATION_ERROR}</Text>}
           <PrimaryButton label={isRestoringSession ? "ログイン状態を確認中…" : isLoggingIn ? "ログイン中…" : "ログイン"} onPress={submitLogin} disabled={!password || isLoggingIn || isRestoringSession || !!BUILD_CONFIGURATION_ERROR} />
         </>}
@@ -466,8 +466,8 @@ const styles = StyleSheet.create({
   reviewCard: { marginTop: 16, padding: 16, borderRadius: 12, backgroundColor: "#fff", borderWidth: 1, borderColor: "#d6dfdc" }, reviewLine: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: 14, paddingVertical: 7 }, reviewLabel: { flex: 1, color: "#60706c", fontSize: 14 }, reviewValue: { flex: 1, textAlign: "right", color: "#1f312c", fontSize: 14 }, strong: { color: "#173c33", fontSize: 17, fontWeight: "900" }, totalDivider: { borderTopWidth: 1, borderTopColor: "#dce4e1", marginTop: 8 },
   notice: { marginTop: 16, padding: 14, borderRadius: 10, backgroundColor: "#fff6df", borderWidth: 1, borderColor: "#ecd49a" }, noticeTitle: { color: "#765200", fontWeight: "900", marginBottom: 5 }, noticeText: { color: "#765f25", fontSize: 13, lineHeight: 19 },
   passwordInput: { marginTop: 16, borderWidth: 1, borderColor: "#aebcb7", borderRadius: 10, paddingHorizontal: 14, paddingVertical: 13, fontSize: 16, backgroundColor: "#fff" },
-  passwordHelp: { marginTop: 8, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  passwordCount: { color: "#60706c", fontSize: 13 }, passwordToggle: { color: "#16745e", fontSize: 14, fontWeight: "800", paddingVertical: 4, paddingHorizontal: 6 },
+  passwordHelp: { marginTop: 8, flexDirection: "row", justifyContent: "flex-end" },
+  passwordToggle: { color: "#16745e", fontSize: 14, fontWeight: "800", paddingVertical: 4, paddingHorizontal: 6 },
   phase: { marginTop: 13, color: "#36564e", fontSize: 14, lineHeight: 20, textAlign: "center" },
   uploadResult: { marginTop: 16, padding: 16, borderRadius: 12, backgroundColor: "#fff", borderWidth: 1, borderColor: "#bcd8cf" },
   deleteButton: { marginTop: 12, minHeight: 52, borderRadius: 12, backgroundColor: "#9b2c2c", alignItems: "center", justifyContent: "center", paddingHorizontal: 18 },
