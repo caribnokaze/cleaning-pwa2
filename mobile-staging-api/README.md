@@ -48,5 +48,56 @@ npm start
 
 ## コンテナ
 
-`Dockerfile`はAWS Lambda Web Adapterを使用します。正式デプロイ前に、検証専用IAM
-ロール、Secrets Manager、Function URL、S3ライフサイクルを別PRで構成します。
+`Dockerfile`はAWS Lambda Web Adapterを使用します。Lambdaでは秘密値を環境変数へ
+直接保存せず、起動時にSecrets Managerから取得します。
+
+## AWSリソース
+
+既存の検証APIを上書きしないよう、次の新しい名前を使用します。
+
+- ECR: `tocoro-mobile-staging-api`
+- Lambda: `tocoro-mobile-staging-api`
+- IAM role: `TocoroMobileStagingApiLambdaRole`
+- Secrets: `tocoro-mobile-staging-api/app-password`、`tocoro-mobile-staging-api/auth-secret`
+- S3: 既存の`tocoro-mobile-staging-[account]-ap-northeast-1`を利用
+
+Lambda実行ロールが操作できるS3オブジェクトは`_system/mobile-test/`配下だけです。
+ライフサイクル設定は既存ルールを残し、テスト写真を1日後に削除するルールだけを
+追加または更新します。
+
+## デプロイ準備
+
+1. デプロイ用IAMユーザーへ[`aws/deployer-policy.json`](aws/deployer-policy.json)を設定します。
+2. AWS CLIの`tocoro-mobile-staging`プロファイルが正しいことを確認します。
+3. Docker Desktopを起動します。
+4. 次を実行してローカル秘密ファイルを作ります。
+
+```bash
+bash scripts/configure-env.sh
+```
+
+`.env.mobile-staging`は権限600で作成され、GitとDockerイメージから除外されます。
+
+## デプロイ
+
+コードレビューとDraft PRの確認が終わるまで実行しません。承認後に次を実行します。
+
+```bash
+npm ci
+npm run deploy
+```
+
+スクリプトは最初にAWSアカウント、東京リージョン、検証用バケット名を照合します。
+一致しない場合はAWSリソースを変更せず停止します。成功時に新しいLambda Function URLが
+表示されます。そのURLをモバイルビルドの`EXPO_PUBLIC_MOBILE_STAGING_API_URL`へ設定します。
+
+## デプロイ後の疎通確認
+
+実写真を使わず、4バイトのダミーJPEGを1件送信・確認・削除します。
+
+```bash
+set -a
+source .env.mobile-staging
+set +a
+npm run test:staging -- <staging-api-url>
+```
