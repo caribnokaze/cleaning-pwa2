@@ -426,18 +426,20 @@ export default function App() {
           <View style={styles.reviewCard}><Text style={styles.groupTitle}>カテゴリー別枚数</Text>{visibleCategories.map((category) => <ReviewLine key={category.id} label={category.label} value={`${selections[category.id]?.assetIds.length ?? 0}枚`} />)}<View style={styles.totalDivider} /><ReviewLine label="合計" value={`${totalPhotos}枚`} strong /></View>
           {IS_STAGING_BUILD && <View style={styles.notice}><Text style={styles.noticeTitle}>検証専用S3への送信です</Text><Text style={styles.noticeText}>本番には送信しません。確認後は、この画面からテスト写真を削除してください。</Text></View>}
           {!!uploadPhase && <Text style={styles.phase}>{uploadPhase}</Text>}
-          {uploadSummary && IS_STAGING_BUILD && <View style={styles.uploadResult}>
-            <Text style={styles.groupTitle}>検証S3送信結果</Text>
+          {uploadSummary && <View style={styles.uploadResult}>
+            <Text style={styles.groupTitle}>{IS_STAGING_BUILD ? "検証S3送信結果" : "送信結果"}</Text>
             <ReviewLine label="成功" value={`${uploadSummary.uploaded}/${uploadSummary.requested}枚`} />
-            <ReviewLine label="準備時間" value={`${uploadSummary.preparationMs}ms`} />
-            <ReviewLine label="送信時間" value={`${uploadSummary.uploadMs}ms`} />
-            <ReviewLine label="送信容量" value={`${(uploadSummary.bytes / 1024 / 1024).toFixed(1)}MB`} />
-            <ReviewLine label="自動再試行" value={`${uploadSummary.automaticRetries}回`} />
-            {uploadSummary.deleted !== undefined && <ReviewLine label="検証S3から削除" value={`${uploadSummary.deleted}枚`} strong />}
+            {IS_STAGING_BUILD && <>
+              <ReviewLine label="準備時間" value={`${uploadSummary.preparationMs}ms`} />
+              <ReviewLine label="送信時間" value={`${uploadSummary.uploadMs}ms`} />
+              <ReviewLine label="送信容量" value={`${(uploadSummary.bytes / 1024 / 1024).toFixed(1)}MB`} />
+              <ReviewLine label="自動再試行" value={`${uploadSummary.automaticRetries}回`} />
+              {uploadSummary.deleted !== undefined && <ReviewLine label="検証S3から削除" value={`${uploadSummary.deleted}枚`} strong />}
+            </>}
           </View>}
           <View style={styles.navigationRow}>
             {!uploadJob && <SecondaryButton label="写真を修正" onPress={() => setScreen("photos")} />}
-            <PrimaryButton label={isUploading ? "送信中…" : uploadJob ? "未完了の送信を再開" : "検証S3へ送信"} onPress={uploadJob ? resumeUpload : startUpload} disabled={!authToken || isUploading || isDeleting || (!!uploadSummary && uploadSummary.uploaded === uploadSummary.requested)} compact />
+            <PrimaryButton label={isUploading ? "送信中…" : uploadJob ? "未完了の送信を再開" : IS_STAGING_BUILD ? "検証S3へ送信" : "写真を送信"} onPress={uploadJob ? resumeUpload : startUpload} disabled={!authToken || isUploading || isDeleting || (!!uploadSummary && uploadSummary.uploaded === uploadSummary.requested)} compact />
           </View>
           {IS_STAGING_BUILD && !!uploadJob && !!authToken && uploadSummary?.uploaded === uploadSummary?.requested && <Pressable style={[styles.deleteButton, isDeleting && styles.buttonDisabled]} onPress={deleteUpload} disabled={isDeleting}><Text style={styles.primaryButtonText}>{isDeleting ? "削除中…" : "確認済みのテスト写真を削除"}</Text></Pressable>}
         </>}
