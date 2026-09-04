@@ -216,6 +216,24 @@ function createApp({ s3 = new S3Client({ region: REGION }), signer = getSignedUr
     return objects;
   }
 
+  async function deleteAllObjects(prefix) {
+    const objects = await listAllObjects(prefix);
+    let deletedCount = 0;
+    for (let start = 0; start < objects.length; start += 1000) {
+      const batch = objects.slice(start, start + 1000).filter((item) => item.Key);
+      if (!batch.length) continue;
+      const result = await s3.send(
+        new DeleteObjectsCommand({
+          Bucket: BUCKET,
+          Delete: { Objects: batch.map((item) => ({ Key: item.Key })), Quiet: false },
+        }),
+      );
+      if (result.Errors?.length) throw new Error("S3 deletion was incomplete");
+      deletedCount += result.Deleted?.length || batch.length;
+    }
+    return deletedCount;
+  }
+
   app.post("/api/mobile-test/presigned-urls", async (req, res) => {
     try {
       if (!validateUploadRequest(req.body)) {
@@ -279,20 +297,7 @@ function createApp({ s3 = new S3Client({ region: REGION }), signer = getSignedUr
       if (!/^[a-z0-9_-]{8,64}$/i.test(runId)) {
         return res.status(400).json({ error: "テストIDが不正です" });
       }
-      const objects = await listAllObjects(`${MOBILE_TEST_PREFIX}${runId}/`);
-      let deletedCount = 0;
-      for (let start = 0; start < objects.length; start += 1000) {
-        const batch = objects.slice(start, start + 1000).filter((item) => item.Key);
-        if (!batch.length) continue;
-        const result = await s3.send(
-          new DeleteObjectsCommand({
-            Bucket: BUCKET,
-            Delete: { Objects: batch.map((item) => ({ Key: item.Key })), Quiet: false },
-          }),
-        );
-        if (result.Errors?.length) throw new Error("S3 deletion was incomplete");
-        deletedCount += result.Deleted?.length || batch.length;
-      }
+      const deletedCount = await deleteAllObjects(`${MOBILE_TEST_PREFIX}${runId}/`);
       res.json({ deletedCount });
     } catch (error) {
       console.error("Run deletion failed", error?.name || "UnknownError");
@@ -376,10 +381,30 @@ function createApp({ s3 = new S3Client({ region: REGION }), signer = getSignedUr
         .map((item) => clientPhotoIdFromFilename(uploadId, item.Key?.split("/").pop() || ""))
         .filter(Boolean)
         .sort();
-      res.json({ uploadId, confirmed });
+      res.json({
+        uploadId,
+        confirmed,
+        totalBytes: objects.reduce((total, item) => total + (item.Size || 0), 0),
+      });
     } catch (error) {
       console.error("Mobile upload lookup failed", error?.name || "UnknownError");
       res.status(500).json({ error: "送信状態を確認できませんでした" });
+    }
+  });
+
+  app.delete("/api/mobile-test/production-contract/:uploadId", async (req, res) => {
+    try {
+      const uploadId = String(req.params.uploadId || "");
+      if (!isSafeIdentifier(uploadId, 64)) {
+        return res.status(400).json({ error: "送信IDが不正です" });
+      }
+      const deletedCount = await deleteAllObjects(
+        `${PRODUCTION_CONTRACT_PREFIX}${uploadId}/`,
+      );
+      res.json({ deletedCount });
+    } catch (error) {
+      console.error("Production-contract test deletion failed", error?.name || "UnknownError");
+      res.status(500).json({ error: "テスト写真を削除できませんでした" });
     }
   });
 

@@ -106,6 +106,14 @@ test("supports the production-shaped authenticated upload flow", async (t) => {
           IsTruncated: false,
         };
       }
+      if (command.constructor.name === "DeleteObjectsCommand") {
+        const keys = new Set(command.input.Delete.Objects.map((item) => item.Key));
+        const deleted = storedObjects.filter((item) => keys.has(item.Key));
+        for (let index = storedObjects.length - 1; index >= 0; index -= 1) {
+          if (keys.has(storedObjects[index].Key)) storedObjects.splice(index, 1);
+        }
+        return { Deleted: deleted.map((item) => ({ Key: item.Key })) };
+      }
       throw new Error(`Unexpected command: ${command.constructor.name}`);
     },
   };
@@ -168,5 +176,14 @@ test("supports the production-shaped authenticated upload flow", async (t) => {
   assert.deepEqual(await lookup.json(), {
     uploadId: "ios-12345678",
     confirmed: ["photo-0001"],
+    totalBytes: 70_000,
   });
+
+  const deletion = await fetch(
+    `${baseUrl}/api/mobile-test/production-contract/ios-12345678`,
+    { method: "DELETE", headers },
+  );
+  assert.equal(deletion.status, 200);
+  assert.deepEqual(await deletion.json(), { deletedCount: 1 });
+  assert.equal(storedObjects.length, 0);
 });
