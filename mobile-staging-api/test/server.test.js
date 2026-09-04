@@ -120,7 +120,7 @@ test("returns Retry-After when login attempts reach the limit", async (t) => {
   });
   assert.equal(limited.status, 429);
   const retryAfter = Number(limited.headers.get("retry-after"));
-  assert.ok(retryAfter >= 899 && retryAfter <= 900);
+  assert.ok(retryAfter >= 59 && retryAfter <= 60);
   assert.deepEqual(await limited.json(), {
     error: "ログイン試行回数が上限に達しました",
     retryAfterSeconds: retryAfter,
