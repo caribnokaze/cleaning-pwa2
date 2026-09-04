@@ -36,6 +36,8 @@ const buildConfigurationError = () => {
   return "";
 };
 const BUILD_CONFIGURATION_ERROR = buildConfigurationError();
+const formatLoginRetryDelay = (seconds: number) =>
+  seconds >= 60 ? `約${Math.ceil(seconds / 60)}分` : "1分未満";
 
 const WORK_TYPES: { id: WorkType; label: string }[] = [
   { id: "normal", label: "通常清掃のみ" },
@@ -200,7 +202,7 @@ export default function App() {
       const retryAfter = Number.parseInt(response.headers.get("retry-after") || "", 10);
       const waitSeconds = Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : 60;
       setLoginRetrySeconds(waitSeconds);
-      throw new Error(`ログインが一時的に制限されています。${waitSeconds}秒後に再試行してください。`);
+      throw new Error(`ログインが一時的に制限されています。${formatLoginRetryDelay(waitSeconds)}後に再試行してください。`);
     }
     if (!response.ok || !body.token || !Number.isFinite(body.expiresAt)) throw new Error(body.error || "検証環境へログインできませんでした");
     return { version: 1, token: body.token, expiresAt: body.expiresAt } satisfies AuthSession;
@@ -372,7 +374,7 @@ export default function App() {
           <TextInput style={styles.passwordInput} value={password} onChangeText={setPassword} placeholder={IS_PRODUCTION ? "パスワード" : "検証環境のパスワード"} secureTextEntry={!passwordVisible} autoCapitalize="none" autoCorrect={false} editable={!isLoggingIn} onSubmitEditing={submitLogin} />
           {IS_PRODUCTION && <View style={styles.passwordHelp}><Pressable onPress={() => setPasswordVisible((visible) => !visible)} disabled={isLoggingIn}><Text style={styles.passwordToggle}>{passwordVisible ? "隠す" : "表示する"}</Text></Pressable></View>}
           {!!BUILD_CONFIGURATION_ERROR && <Text style={styles.error}>{BUILD_CONFIGURATION_ERROR}</Text>}
-          <PrimaryButton label={isRestoringSession ? "ログイン状態を確認中…" : isLoggingIn ? "ログイン中…" : loginRetrySeconds > 0 ? `再試行まで ${loginRetrySeconds}秒` : "ログイン"} onPress={submitLogin} disabled={!password || isLoggingIn || isRestoringSession || loginRetrySeconds > 0 || !!BUILD_CONFIGURATION_ERROR} />
+          <PrimaryButton label={isRestoringSession ? "ログイン状態を確認中…" : isLoggingIn ? "ログイン中…" : loginRetrySeconds > 0 ? `再試行まで ${formatLoginRetryDelay(loginRetrySeconds)}` : "ログイン"} onPress={submitLogin} disabled={!password || isLoggingIn || isRestoringSession || loginRetrySeconds > 0 || !!BUILD_CONFIGURATION_ERROR} />
         </>}
 
         {screen === "details" && <>
