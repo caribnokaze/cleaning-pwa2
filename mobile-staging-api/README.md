@@ -16,6 +16,7 @@ iOS・Androidネイティブ写真機能の実機試験だけに使う独立API�
 - `POST /api/mobile/photos/presigned-urls`
 - `POST /api/mobile/photos/confirm`
 - `GET /api/mobile/uploads/:uploadId`
+- `DELETE /api/mobile-test/production-contract/:uploadId`（検証環境のみ）
 
 互換APIも保存先は `_system/mobile-test/production-contract/` 配下に固定され、
 本番S3や既存Web APIへは接続しません。同じ `uploadId` と `clientPhotoId` には
