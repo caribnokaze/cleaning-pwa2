@@ -59,15 +59,29 @@ ReleaseビルドではJavaScript bundleをアプリへ含められるため、�
 
 ## 現場情報付きステージング試験
 
-検証API URLはリポジトリへ固定せず、Git管理外の`mobile/.env.local`に設定します。
+検証API URLとビルド種別はリポジトリへ固定せず、Git管理外の`mobile/.env.local`に設定します。
 
 ```bash
 cp .env.example .env.local
 ```
 
 ```env
-EXPO_PUBLIC_MOBILE_STAGING_API_URL=https://your-staging-api.example
+EXPO_PUBLIC_APP_ENV=preview
+EXPO_PUBLIC_MOBILE_API_URL=https://your-staging-api.example
 ```
+
+`preview`は検証専用Lambda以外を指定するとビルド時および起動時に停止します。
+`production`は明示的な承認フラグ、本番API URL、iOS・Androidの正式アプリIDが
+すべて設定されるまでビルドできません。現時点では本番設定を有効化しません。
+
+| ビルド種別 | 接続先 | 検証削除・性能計測 |
+|---|---|---|
+| `development` | ローカルまたは検証API | 表示する |
+| `preview` | 検証専用APIのみ | 表示する |
+| `production` | 承認済み本番APIのみ | 表示しない |
+
+EAS Buildの各profileは`EXPO_PUBLIC_APP_ENV`を固定しています。API URLはEASの
+環境変数として別途設定し、ソースやGitへ秘密値を保存しません。
 
 1. 撮影日、現場名、担当者名を入力する
 2. 独自高速ピッカーで写真を選択する
@@ -78,7 +92,7 @@ EXPO_PUBLIC_MOBILE_STAGING_API_URL=https://your-staging-api.example
 写真は本番とは分離した`_system/mobile-test/`へ保存されます。確認前にアプリを
 終了した場合も、S3ライフサイクルにより1日後に自動削除されます。
 
-正式版UIの検証送信は、本番予定のAPI契約
+正式版UIのpreview検証送信は、本番予定のAPI契約
 `/api/mobile/photos/presigned-urls`、`/api/mobile/photos/confirm`、
 `/api/mobile/uploads/:uploadId`を使用します。保存先は引き続き検証S3の
 `_system/mobile-test/production-contract/`配下に固定され、本番へは送信しません。

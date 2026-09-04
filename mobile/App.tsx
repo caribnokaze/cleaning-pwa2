@@ -13,10 +13,29 @@ type UploadJob = { version: 1; date: string; site: string; staff: string; workTy
 type UploadSummary = { requested: number; uploaded: number; bytes: number; preparationMs: number; uploadMs: number; automaticRetries: number; deleted?: number };
 type AuthSession = { version: 1; token: string; expiresAt: number };
 
-const STAGING_API_URL = (process.env.EXPO_PUBLIC_MOBILE_STAGING_API_URL || "").replace(/\/$/, "");
-const UPLOAD_JOB_KEY = "tocoro.production-ui.staging-upload.v1";
-const AUTH_SESSION_KEY = "tocoro.production-ui.staging-auth.v1";
+const APP_ENV = process.env.EXPO_PUBLIC_APP_ENV || "";
+const API_URL = (process.env.EXPO_PUBLIC_MOBILE_API_URL || "").replace(/\/$/, "");
+const STAGING_API_ORIGIN = "https://bjm3jjmvgw2s3ztryzevgvyzx40sztln.lambda-url.ap-northeast-1.on.aws";
+const IS_PRODUCTION = APP_ENV === "production";
+const IS_STAGING_BUILD = APP_ENV === "development" || APP_ENV === "preview";
+const UPLOAD_JOB_KEY = IS_PRODUCTION ? "tocoro.production-ui.production-upload.v1" : "tocoro.production-ui.staging-upload.v1";
+const AUTH_SESSION_KEY = IS_PRODUCTION ? "tocoro.production-ui.production-auth.v1" : "tocoro.production-ui.staging-auth.v1";
 const DECLARED_MAX_COMPRESSED_BYTES = 2 * 1024 * 1024;
+
+const buildConfigurationError = () => {
+  if (!API_URL || !["development", "preview", "production"].includes(APP_ENV)) {
+    return "アプリの接続環境が設定されていません。送信は停止されています。";
+  }
+  try {
+    const origin = new URL(API_URL).origin;
+    if (APP_ENV === "preview" && origin !== STAGING_API_ORIGIN) return "検証版の接続先が正しくありません。送信は停止されています。";
+    if (IS_PRODUCTION && origin === STAGING_API_ORIGIN) return "本番版から検証環境へは接続できません。";
+  } catch {
+    return "APIの接続先が正しくありません。送信は停止されています。";
+  }
+  return "";
+};
+const BUILD_CONFIGURATION_ERROR = buildConfigurationError();
 
 const WORK_TYPES: { id: WorkType; label: string }[] = [
   { id: "normal", label: "通常清掃のみ" },
@@ -159,7 +178,8 @@ export default function App() {
   };
 
   const authenticate = async () => {
-    const response = await fetch(`${STAGING_API_URL}/api/mobile/login`, {
+    if (BUILD_CONFIGURATION_ERROR) throw new Error(BUILD_CONFIGURATION_ERROR);
+    const response = await fetch(`${API_URL}/api/mobile/login`, {
       method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ password }),
     });
     const body = await response.json();
@@ -181,7 +201,7 @@ export default function App() {
   };
 
   const submitLogin = async () => {
-    if (!password || isLoggingIn || !STAGING_API_URL) return;
+    if (!password || isLoggingIn || BUILD_CONFIGURATION_ERROR) return;
     setError(""); setIsLoggingIn(true);
     try {
       const session = await authenticate();
@@ -210,7 +230,7 @@ export default function App() {
   };
 
   const runUpload = async (job: UploadJob, token: string) => {
-    if (!STAGING_API_URL) throw new Error("検証APIのURLが設定されていません。");
+    if (BUILD_CONFIGURATION_ERROR) throw new Error(BUILD_CONFIGURATION_ERROR);
     if (!FastPhotoPicker) throw new Error("写真送信機能を利用できません。");
     let uploaded = 0, bytes = 0, preparationMs = 0, uploadMs = 0, automaticRetries = 0;
     for (let categoryIndex = 0; categoryIndex < job.categories.length; categoryIndex += 1) {
@@ -222,7 +242,7 @@ export default function App() {
         size: DECLARED_MAX_COMPRESSED_BYTES,
       }));
       setUploadPhase(`${categoryIndex + 1}/${job.categories.length} ${category?.label || item.id}：保存済み写真を確認中…`);
-      const beforeResponse = await fetch(`${STAGING_API_URL}/api/mobile/uploads/${item.runId}`, { headers: { authorization: `Bearer ${token}` } });
+      const beforeResponse = await fetch(`${API_URL}/api/mobile/uploads/${item.runId}`, { headers: { authorization: `Bearer ${token}` } });
       requireValidSession(beforeResponse);
       const beforeBody = await beforeResponse.json();
       if (!beforeResponse.ok) throw new Error(beforeBody.error || "保存済み写真を確認できませんでした");
@@ -230,7 +250,7 @@ export default function App() {
       const missing = files.map((file, index) => stored.has(file.clientPhotoId) ? -1 : index).filter((index) => index >= 0);
       if (missing.length) {
         setUploadPhase(`${categoryIndex + 1}/${job.categories.length} ${category?.label || item.id}：${missing.length}枚を準備・送信中…`);
-        const signedResponse = await fetch(`${STAGING_API_URL}/api/mobile/photos/presigned-urls`, {
+        const signedResponse = await fetch(`${API_URL}/api/mobile/photos/presigned-urls`, {
           method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
           body: JSON.stringify({ uploadId: item.runId, date: job.date, site: job.site, staff: job.staff, photoId: item.id, files: missing.map((index) => files[index]) }),
         });
@@ -246,7 +266,7 @@ export default function App() {
         preparationMs += nativeResult.preparationMs; uploadMs += nativeResult.uploadMs;
         automaticRetries += nativeResult.automaticRetryCount;
       }
-      const confirmResponse = await fetch(`${STAGING_API_URL}/api/mobile/photos/confirm`, {
+      const confirmResponse = await fetch(`${API_URL}/api/mobile/photos/confirm`, {
         method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
         body: JSON.stringify({ uploadId: item.runId, photos: files.map(({ clientPhotoId }) => ({ clientPhotoId })) }),
       });
@@ -255,7 +275,7 @@ export default function App() {
       if (!confirmResponse.ok || confirmed.missing?.length || confirmed.confirmed?.length !== item.assetIds.length) {
         throw new Error(`${category?.label || item.id}：${confirmed.missing?.length ?? item.assetIds.length}枚が未送信です`);
       }
-      const verifyResponse = await fetch(`${STAGING_API_URL}/api/mobile/uploads/${item.runId}`, { headers: { authorization: `Bearer ${token}` } });
+      const verifyResponse = await fetch(`${API_URL}/api/mobile/uploads/${item.runId}`, { headers: { authorization: `Bearer ${token}` } });
       requireValidSession(verifyResponse);
       const verified = await verifyResponse.json();
       if (!verifyResponse.ok || verified.confirmed?.length !== item.assetIds.length) {
@@ -264,7 +284,12 @@ export default function App() {
       uploaded += verified.confirmed.length; bytes += verified.totalBytes || 0;
       setUploadSummary({ requested: job.categories.reduce((sum, entry) => sum + entry.assetIds.length, 0), uploaded, bytes, preparationMs, uploadMs, automaticRetries });
     }
-    setUploadPhase("全カテゴリーの検証S3保存を確認しました。確認後に削除してください。");
+    if (IS_STAGING_BUILD) {
+      setUploadPhase("全カテゴリーの検証S3保存を確認しました。確認後に削除してください。");
+    } else {
+      await AsyncStorage.removeItem(UPLOAD_JOB_KEY); setUploadJob(null);
+      setUploadPhase("全カテゴリーの送信が完了しました。");
+    }
   };
 
   const startUpload = async () => {
@@ -289,12 +314,12 @@ export default function App() {
   };
 
   const deleteUpload = async () => {
-    if (!uploadJob || !authToken || isDeleting) return;
+    if (!IS_STAGING_BUILD || !uploadJob || !authToken || isDeleting) return;
     setError(""); setIsDeleting(true); setUploadPhase("検証S3から写真を削除中…");
     try {
       let deleted = 0;
       for (const item of uploadJob.categories) {
-        const response = await fetch(`${STAGING_API_URL}/api/mobile-test/production-contract/${item.runId}`, { method: "DELETE", headers: { authorization: `Bearer ${authToken}` } });
+        const response = await fetch(`${API_URL}/api/mobile-test/production-contract/${item.runId}`, { method: "DELETE", headers: { authorization: `Bearer ${authToken}` } });
         requireValidSession(response);
         const body = await response.json();
         if (!response.ok) throw new Error(body.error || "検証写真を削除できませんでした");
@@ -310,7 +335,7 @@ export default function App() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar style="dark" />
-      <View style={styles.header}><Text style={styles.brand}>TOCORO.</Text><Text style={styles.headerTitle}>清掃写真報告</Text>{screen !== "login" && <Pressable style={styles.logoutButton} onPress={logout} disabled={isUploading || isDeleting}><Text style={styles.logoutText}>ログアウト</Text></Pressable>}</View>
+      <View style={styles.header}><Text style={styles.brand}>TOCORO.</Text><Text style={styles.headerTitle}>清掃写真報告</Text>{IS_STAGING_BUILD && <View style={styles.headerEnvironmentBadge}><Text style={styles.headerEnvironmentText}>検証環境</Text></View>}{screen !== "login" && <Pressable style={styles.logoutButton} onPress={logout} disabled={isUploading || isDeleting}><Text style={styles.logoutText}>ログアウト</Text></Pressable>}</View>
       {screen !== "login" && <View style={styles.steps}>
         {(["details", "photos", "review"] as Screen[]).map((step, index) => (
           <View key={step} style={styles.stepItem}>
@@ -321,13 +346,13 @@ export default function App() {
       </View>}
       <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
         {screen === "login" && <>
-          <View style={styles.environmentBadge}><Text style={styles.environmentBadgeText}>検証環境</Text></View>
           <Text style={styles.title}>ログイン</Text>
-          <Text style={styles.description}>清掃写真報告を始めるため、検証環境の共通パスワードを入力してください。パスワードは端末へ保存しません。</Text>
+          <Text style={styles.description}>清掃写真報告を始めるため、共通パスワードを入力してください。パスワードは端末へ保存しません。</Text>
           {!!uploadJob && <View style={styles.notice}><Text style={styles.noticeTitle}>未完了の送信があります</Text><Text style={styles.noticeText}>ログイン後、確認画面から未完了分だけ再開できます。</Text></View>}
           <TextInput style={styles.passwordInput} value={password} onChangeText={setPassword} placeholder="検証環境のパスワード" secureTextEntry={!passwordVisible} autoCapitalize="none" autoCorrect={false} editable={!isLoggingIn} onSubmitEditing={submitLogin} />
           <View style={styles.passwordHelp}><Text style={styles.passwordCount}>{password.length ? `入力済み：${password.length}文字` : "未入力"}</Text><Pressable onPress={() => setPasswordVisible((visible) => !visible)} disabled={isLoggingIn}><Text style={styles.passwordToggle}>{passwordVisible ? "隠す" : "表示する"}</Text></Pressable></View>
-          <PrimaryButton label={isRestoringSession ? "ログイン状態を確認中…" : isLoggingIn ? "ログイン中…" : "ログイン"} onPress={submitLogin} disabled={!password || isLoggingIn || isRestoringSession || !STAGING_API_URL} />
+          {!!BUILD_CONFIGURATION_ERROR && <Text style={styles.error}>{BUILD_CONFIGURATION_ERROR}</Text>}
+          <PrimaryButton label={isRestoringSession ? "ログイン状態を確認中…" : isLoggingIn ? "ログイン中…" : "ログイン"} onPress={submitLogin} disabled={!password || isLoggingIn || isRestoringSession || !!BUILD_CONFIGURATION_ERROR} />
         </>}
 
         {screen === "details" && <>
@@ -377,9 +402,9 @@ export default function App() {
           <Text style={styles.title}>送信内容を確認</Text>
           <View style={styles.reviewCard}><ReviewLine label="清掃日" value={cleaningDate} /><ReviewLine label="担当者" value={staffName} /><ReviewLine label="現場" value={siteName} /><ReviewLine label="作業区分" value={WORK_TYPES.find((item) => item.id === workType)?.label ?? ""} />{includesFilter(workType) && <ReviewLine label="作業時間" value={`${workTime}分`} />}</View>
           <View style={styles.reviewCard}><Text style={styles.groupTitle}>カテゴリー別枚数</Text>{visibleCategories.map((category) => <ReviewLine key={category.id} label={category.label} value={`${selections[category.id]?.assetIds.length ?? 0}枚`} />)}<View style={styles.totalDivider} /><ReviewLine label="合計" value={`${totalPhotos}枚`} strong /></View>
-          <View style={styles.notice}><Text style={styles.noticeTitle}>検証専用S3への送信です</Text><Text style={styles.noticeText}>本番には送信しません。確認後は、この画面からテスト写真を削除してください。</Text></View>
+          {IS_STAGING_BUILD && <View style={styles.notice}><Text style={styles.noticeTitle}>検証専用S3への送信です</Text><Text style={styles.noticeText}>本番には送信しません。確認後は、この画面からテスト写真を削除してください。</Text></View>}
           {!!uploadPhase && <Text style={styles.phase}>{uploadPhase}</Text>}
-          {uploadSummary && <View style={styles.uploadResult}>
+          {uploadSummary && IS_STAGING_BUILD && <View style={styles.uploadResult}>
             <Text style={styles.groupTitle}>検証S3送信結果</Text>
             <ReviewLine label="成功" value={`${uploadSummary.uploaded}/${uploadSummary.requested}枚`} />
             <ReviewLine label="準備時間" value={`${uploadSummary.preparationMs}ms`} />
@@ -392,7 +417,7 @@ export default function App() {
             {!uploadJob && <SecondaryButton label="写真を修正" onPress={() => setScreen("photos")} />}
             <PrimaryButton label={isUploading ? "送信中…" : uploadJob ? "未完了の送信を再開" : "検証S3へ送信"} onPress={uploadJob ? resumeUpload : startUpload} disabled={!authToken || isUploading || isDeleting || (!!uploadSummary && uploadSummary.uploaded === uploadSummary.requested)} compact />
           </View>
-          {!!uploadJob && !!authToken && uploadSummary?.uploaded === uploadSummary?.requested && <Pressable style={[styles.deleteButton, isDeleting && styles.buttonDisabled]} onPress={deleteUpload} disabled={isDeleting}><Text style={styles.primaryButtonText}>{isDeleting ? "削除中…" : "確認済みのテスト写真を削除"}</Text></Pressable>}
+          {IS_STAGING_BUILD && !!uploadJob && !!authToken && uploadSummary?.uploaded === uploadSummary?.requested && <Pressable style={[styles.deleteButton, isDeleting && styles.buttonDisabled]} onPress={deleteUpload} disabled={isDeleting}><Text style={styles.primaryButtonText}>{isDeleting ? "削除中…" : "確認済みのテスト写真を削除"}</Text></Pressable>}
         </>}
         {!!error && <Text style={styles.error}>{error}</Text>}
       </ScrollView>
@@ -418,6 +443,8 @@ const styles = StyleSheet.create({
   header: { paddingHorizontal: 20, paddingTop: 12, paddingBottom: 10, flexDirection: "row", alignItems: "center", backgroundColor: "#fff", borderBottomWidth: 1, borderBottomColor: "#dce4e1" },
   brand: { fontSize: 23, fontWeight: "900", color: "#12634f", marginRight: 10 },
   headerTitle: { flex: 1, fontSize: 16, fontWeight: "700", color: "#36564e" },
+  headerEnvironmentBadge: { marginRight: 8, paddingHorizontal: 7, paddingVertical: 4, borderRadius: 9, backgroundColor: "#fff0c2" },
+  headerEnvironmentText: { color: "#765200", fontSize: 10, fontWeight: "900" },
   logoutButton: { paddingVertical: 7, paddingHorizontal: 9, borderRadius: 8, borderWidth: 1, borderColor: "#9db0aa" },
   logoutText: { color: "#36564e", fontSize: 12, fontWeight: "800" },
   steps: { flexDirection: "row", justifyContent: "space-around", paddingVertical: 12, backgroundColor: "#fff" },
@@ -438,7 +465,6 @@ const styles = StyleSheet.create({
   total: { textAlign: "right", color: "#173c33", fontSize: 17, fontWeight: "900", marginBottom: 14 }, navigationRow: { flexDirection: "row", gap: 10, marginTop: 8 }, secondaryButton: { minWidth: 98, minHeight: 52, borderRadius: 12, borderWidth: 1, borderColor: "#16745e", alignItems: "center", justifyContent: "center", backgroundColor: "#fff", paddingHorizontal: 16 }, secondaryButtonText: { color: "#16745e", fontSize: 16, fontWeight: "800" },
   reviewCard: { marginTop: 16, padding: 16, borderRadius: 12, backgroundColor: "#fff", borderWidth: 1, borderColor: "#d6dfdc" }, reviewLine: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: 14, paddingVertical: 7 }, reviewLabel: { flex: 1, color: "#60706c", fontSize: 14 }, reviewValue: { flex: 1, textAlign: "right", color: "#1f312c", fontSize: 14 }, strong: { color: "#173c33", fontSize: 17, fontWeight: "900" }, totalDivider: { borderTopWidth: 1, borderTopColor: "#dce4e1", marginTop: 8 },
   notice: { marginTop: 16, padding: 14, borderRadius: 10, backgroundColor: "#fff6df", borderWidth: 1, borderColor: "#ecd49a" }, noticeTitle: { color: "#765200", fontWeight: "900", marginBottom: 5 }, noticeText: { color: "#765f25", fontSize: 13, lineHeight: 19 },
-  environmentBadge: { alignSelf: "flex-start", marginBottom: 14, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 12, backgroundColor: "#fff0c2" }, environmentBadgeText: { color: "#765200", fontSize: 12, fontWeight: "900" },
   passwordInput: { marginTop: 16, borderWidth: 1, borderColor: "#aebcb7", borderRadius: 10, paddingHorizontal: 14, paddingVertical: 13, fontSize: 16, backgroundColor: "#fff" },
   passwordHelp: { marginTop: 8, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   passwordCount: { color: "#60706c", fontSize: 13 }, passwordToggle: { color: "#16745e", fontSize: 14, fontWeight: "800", paddingVertical: 4, paddingHorizontal: 6 },
