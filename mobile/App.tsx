@@ -151,7 +151,13 @@ export default function App() {
 
   useEffect(() => {
     if (loginRetrySeconds <= 0) return;
-    const timer = setInterval(() => setLoginRetrySeconds((seconds) => Math.max(0, seconds - 1)), 1_000);
+    const timer = setInterval(() => setLoginRetrySeconds((seconds) => {
+      if (seconds <= 1) {
+        setError("");
+        return 0;
+      }
+      return seconds - 1;
+    }), 1_000);
     return () => clearInterval(timer);
   }, [loginRetrySeconds > 0]);
 
