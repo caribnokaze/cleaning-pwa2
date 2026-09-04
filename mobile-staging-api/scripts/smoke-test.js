@@ -54,8 +54,19 @@ async function main() {
   const contractState = await request(`/api/mobile/uploads/${contractUploadId}`, {
     headers: { authorization: `Bearer ${token}` },
   });
-  if (contractState.uploadId !== contractUploadId || contractState.confirmed?.length !== 0) {
+  if (
+    contractState.uploadId !== contractUploadId ||
+    contractState.confirmed?.length !== 0 ||
+    contractState.totalBytes !== 0
+  ) {
     throw new Error("Production-shaped upload lookup failed");
+  }
+  const contractDeleted = await request(
+    `/api/mobile-test/production-contract/${contractUploadId}`,
+    { method: "DELETE", headers: { authorization: `Bearer ${token}` } },
+  );
+  if (contractDeleted.deletedCount !== 0) {
+    throw new Error("Production-shaped test cleanup failed");
   }
   const [target] = await request("/api/mobile-test/presigned-urls", {
     method: "POST",
