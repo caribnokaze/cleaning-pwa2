@@ -11,6 +11,16 @@ iOS・Androidネイティブ写真機能の実機試験だけに使う独立API�
 - `GET /api/mobile-test/runs/:runId`
 - `DELETE /api/mobile-test/runs/:runId`
 
+本番予定の契約を検証S3だけで試す互換API:
+
+- `POST /api/mobile/photos/presigned-urls`
+- `POST /api/mobile/photos/confirm`
+- `GET /api/mobile/uploads/:uploadId`
+
+互換APIも保存先は `_system/mobile-test/production-contract/` 配下に固定され、
+本番S3や既存Web APIへは接続しません。同じ `uploadId` と `clientPhotoId` には
+同じファイル名を返すため、中断復帰時に写真を重複保存しません。
+
 ## 安全条件
 
 - リージョンは`ap-northeast-1`のみ
