@@ -63,6 +63,7 @@ export default function App() {
   const [isPicking, setIsPicking] = useState(false);
   const [error, setError] = useState("");
   const [password, setPassword] = useState("");
+  const [passwordVisible, setPasswordVisible] = useState(false);
   const [uploadJob, setUploadJob] = useState<UploadJob | null>(null);
   const [authToken, setAuthToken] = useState("");
   const [isUploading, setIsUploading] = useState(false);
@@ -264,7 +265,8 @@ export default function App() {
           <View style={styles.reviewCard}><ReviewLine label="清掃日" value={cleaningDate} /><ReviewLine label="担当者" value={staffName} /><ReviewLine label="現場" value={siteName} /><ReviewLine label="作業区分" value={WORK_TYPES.find((item) => item.id === workType)?.label ?? ""} />{includesFilter(workType) && <ReviewLine label="作業時間" value={`${workTime}分`} />}</View>
           <View style={styles.reviewCard}><Text style={styles.groupTitle}>カテゴリー別枚数</Text>{visibleCategories.map((category) => <ReviewLine key={category.id} label={category.label} value={`${selections[category.id]?.assetIds.length ?? 0}枚`} />)}<View style={styles.totalDivider} /><ReviewLine label="合計" value={`${totalPhotos}枚`} strong /></View>
           <View style={styles.notice}><Text style={styles.noticeTitle}>検証専用S3への送信です</Text><Text style={styles.noticeText}>本番には送信しません。確認後は、この画面からテスト写真を削除してください。</Text></View>
-          <TextInput style={styles.passwordInput} value={password} onChangeText={setPassword} placeholder="検証環境のパスワード" secureTextEntry autoCapitalize="none" autoCorrect={false} editable={!isUploading && !isDeleting} />
+          <TextInput style={styles.passwordInput} value={password} onChangeText={setPassword} placeholder="検証環境のパスワード" secureTextEntry={!passwordVisible} autoCapitalize="none" autoCorrect={false} editable={!isUploading && !isDeleting} />
+          <View style={styles.passwordHelp}><Text style={styles.passwordCount}>{password.length ? `入力済み：${password.length}文字` : "未入力"}</Text><Pressable onPress={() => setPasswordVisible((visible) => !visible)} disabled={isUploading || isDeleting}><Text style={styles.passwordToggle}>{passwordVisible ? "隠す" : "表示する"}</Text></Pressable></View>
           {!!uploadPhase && <Text style={styles.phase}>{uploadPhase}</Text>}
           {uploadSummary && <View style={styles.uploadResult}>
             <Text style={styles.groupTitle}>検証S3送信結果</Text>
@@ -324,6 +326,8 @@ const styles = StyleSheet.create({
   reviewCard: { marginTop: 16, padding: 16, borderRadius: 12, backgroundColor: "#fff", borderWidth: 1, borderColor: "#d6dfdc" }, reviewLine: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: 14, paddingVertical: 7 }, reviewLabel: { flex: 1, color: "#60706c", fontSize: 14 }, reviewValue: { flex: 1, textAlign: "right", color: "#1f312c", fontSize: 14 }, strong: { color: "#173c33", fontSize: 17, fontWeight: "900" }, totalDivider: { borderTopWidth: 1, borderTopColor: "#dce4e1", marginTop: 8 },
   notice: { marginTop: 16, padding: 14, borderRadius: 10, backgroundColor: "#fff6df", borderWidth: 1, borderColor: "#ecd49a" }, noticeTitle: { color: "#765200", fontWeight: "900", marginBottom: 5 }, noticeText: { color: "#765f25", fontSize: 13, lineHeight: 19 },
   passwordInput: { marginTop: 16, borderWidth: 1, borderColor: "#aebcb7", borderRadius: 10, paddingHorizontal: 14, paddingVertical: 13, fontSize: 16, backgroundColor: "#fff" },
+  passwordHelp: { marginTop: 8, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  passwordCount: { color: "#60706c", fontSize: 13 }, passwordToggle: { color: "#16745e", fontSize: 14, fontWeight: "800", paddingVertical: 4, paddingHorizontal: 6 },
   phase: { marginTop: 13, color: "#36564e", fontSize: 14, lineHeight: 20, textAlign: "center" },
   uploadResult: { marginTop: 16, padding: 16, borderRadius: 12, backgroundColor: "#fff", borderWidth: 1, borderColor: "#bcd8cf" },
   deleteButton: { marginTop: 12, minHeight: 52, borderRadius: 12, backgroundColor: "#9b2c2c", alignItems: "center", justifyContent: "center", paddingHorizontal: 18 },
