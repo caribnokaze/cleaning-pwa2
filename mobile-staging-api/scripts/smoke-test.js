@@ -25,6 +25,38 @@ async function main() {
     authorization: `Bearer ${token}`,
     "content-type": "application/json",
   };
+  const contractUploadId = `contract-${Date.now()}`;
+  const contractSigned = await request("/api/mobile/photos/presigned-urls", {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      uploadId: contractUploadId,
+      date: "2026-09-04",
+      site: "smoke-test",
+      staff: "automated",
+      photoId: "photos_general",
+      files: [{
+        clientPhotoId: "smoke-photo-0001",
+        contentType: "image/jpeg",
+        size: 4,
+      }],
+    }),
+  });
+  if (
+    contractSigned.uploadId !== contractUploadId ||
+    contractSigned.files?.length !== 1 ||
+    !contractSigned.files[0].key.startsWith(
+      `_system/mobile-test/production-contract/${contractUploadId}/`,
+    )
+  ) {
+    throw new Error("Production-shaped presigned URL response is invalid");
+  }
+  const contractState = await request(`/api/mobile/uploads/${contractUploadId}`, {
+    headers: { authorization: `Bearer ${token}` },
+  });
+  if (contractState.uploadId !== contractUploadId || contractState.confirmed?.length !== 0) {
+    throw new Error("Production-shaped upload lookup failed");
+  }
   const [target] = await request("/api/mobile-test/presigned-urls", {
     method: "POST",
     headers,
@@ -53,7 +85,7 @@ async function main() {
     headers: { authorization: `Bearer ${token}` },
   });
   if (deleted.deletedCount !== 1) throw new Error("Test object deletion failed");
-  console.log("Smoke test: login, upload, verify, delete OK");
+  console.log("Smoke test: login, production-shaped contract, upload, verify, delete OK");
 }
 
 main().catch(async (error) => {
