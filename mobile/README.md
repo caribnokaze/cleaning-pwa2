@@ -78,6 +78,12 @@ EXPO_PUBLIC_MOBILE_STAGING_API_URL=https://your-staging-api.example
 写真は本番とは分離した`_system/mobile-test/`へ保存されます。確認前にアプリを
 終了した場合も、S3ライフサイクルにより1日後に自動削除されます。
 
+正式版UIの検証送信は、本番予定のAPI契約
+`/api/mobile/photos/presigned-urls`、`/api/mobile/photos/confirm`、
+`/api/mobile/uploads/:uploadId`を使用します。保存先は引き続き検証S3の
+`_system/mobile-test/production-contract/`配下に固定され、本番へは送信しません。
+確認後の即時削除だけは検証専用APIを使用します。
+
 ## 中断復帰
 
 送信開始前に、実行ID・写真ID・撮影日・現場名・担当者名を端末へ保存します。

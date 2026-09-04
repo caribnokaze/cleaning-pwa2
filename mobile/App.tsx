@@ -13,6 +13,7 @@ type UploadSummary = { requested: number; uploaded: number; bytes: number; prepa
 
 const STAGING_API_URL = (process.env.EXPO_PUBLIC_MOBILE_STAGING_API_URL || "").replace(/\/$/, "");
 const UPLOAD_JOB_KEY = "tocoro.production-ui.staging-upload.v1";
+const DECLARED_MAX_COMPRESSED_BYTES = 2 * 1024 * 1024;
 
 const WORK_TYPES: { id: WorkType; label: string }[] = [
   { id: "normal", label: "通常清掃のみ" },
@@ -132,33 +133,48 @@ export default function App() {
     for (let categoryIndex = 0; categoryIndex < job.categories.length; categoryIndex += 1) {
       const item = job.categories[categoryIndex];
       const category = CATEGORIES.find((candidate) => candidate.id === item.id);
-      const files = item.assetIds.map((_, index) => ({ filename: `${String(index + 1).padStart(3, "0")}.jpg` }));
+      const files = item.assetIds.map((_, index) => ({
+        clientPhotoId: `photo-${String(index + 1).padStart(4, "0")}`,
+        contentType: "image/jpeg",
+        size: DECLARED_MAX_COMPRESSED_BYTES,
+      }));
       setUploadPhase(`${categoryIndex + 1}/${job.categories.length} ${category?.label || item.id}：保存済み写真を確認中…`);
-      const beforeResponse = await fetch(`${STAGING_API_URL}/api/mobile-test/runs/${item.runId}`, { headers: { authorization: `Bearer ${token}` } });
+      const beforeResponse = await fetch(`${STAGING_API_URL}/api/mobile/uploads/${item.runId}`, { headers: { authorization: `Bearer ${token}` } });
       const beforeBody = await beforeResponse.json();
       if (!beforeResponse.ok) throw new Error(beforeBody.error || "保存済み写真を確認できませんでした");
-      const stored = new Set<string>(beforeBody.filenames || []);
-      const missing = files.map((file, index) => stored.has(file.filename) ? -1 : index).filter((index) => index >= 0);
+      const stored = new Set<string>(beforeBody.confirmed || []);
+      const missing = files.map((file, index) => stored.has(file.clientPhotoId) ? -1 : index).filter((index) => index >= 0);
       if (missing.length) {
         setUploadPhase(`${categoryIndex + 1}/${job.categories.length} ${category?.label || item.id}：${missing.length}枚を準備・送信中…`);
-        const signedResponse = await fetch(`${STAGING_API_URL}/api/mobile-test/presigned-urls`, {
+        const signedResponse = await fetch(`${STAGING_API_URL}/api/mobile/photos/presigned-urls`, {
           method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
-          body: JSON.stringify({ runId: item.runId, date: job.date, site: job.site, staff: job.staff, files: missing.map((index) => files[index]) }),
+          body: JSON.stringify({ uploadId: item.runId, date: job.date, site: job.site, staff: job.staff, photoId: item.id, files: missing.map((index) => files[index]) }),
         });
-        const targets = await signedResponse.json();
-        if (!signedResponse.ok || !Array.isArray(targets)) throw new Error(targets.error || "送信URLを取得できませんでした");
+        const signedBody = await signedResponse.json();
+        if (!signedResponse.ok || !Array.isArray(signedBody.files)) throw new Error(signedBody.error || "送信URLを取得できませんでした");
+        const targetById = new Map<string, string>(signedBody.files.map((target: { clientPhotoId: string; uploadUrl: string }) => [target.clientPhotoId, target.uploadUrl]));
+        const uploadUrls = missing.map((index) => targetById.get(files[index].clientPhotoId) || "");
+        if (uploadUrls.some((uploadUrl) => !uploadUrl)) throw new Error("写真と送信URLを対応付けできませんでした");
         const nativeResult = await FastPhotoPicker.prepareAndUploadPhotos(
-          missing.map((index) => item.assetIds[index]), targets.map((target: { uploadUrl: string }) => target.uploadUrl), 720, 0.45, "none",
+          missing.map((index) => item.assetIds[index]), uploadUrls, 720, 0.45, "none",
         );
         preparationMs += nativeResult.preparationMs; uploadMs += nativeResult.uploadMs;
         automaticRetries += nativeResult.automaticRetryCount;
       }
-      const verifyResponse = await fetch(`${STAGING_API_URL}/api/mobile-test/runs/${item.runId}`, { headers: { authorization: `Bearer ${token}` } });
-      const verified = await verifyResponse.json();
-      if (!verifyResponse.ok || verified.photoCount !== item.assetIds.length) {
-        throw new Error(`${category?.label || item.id}：${item.assetIds.length - (verified.photoCount || 0)}枚が未送信です`);
+      const confirmResponse = await fetch(`${STAGING_API_URL}/api/mobile/photos/confirm`, {
+        method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+        body: JSON.stringify({ uploadId: item.runId, photos: files.map(({ clientPhotoId }) => ({ clientPhotoId })) }),
+      });
+      const confirmed = await confirmResponse.json();
+      if (!confirmResponse.ok || confirmed.missing?.length || confirmed.confirmed?.length !== item.assetIds.length) {
+        throw new Error(`${category?.label || item.id}：${confirmed.missing?.length ?? item.assetIds.length}枚が未送信です`);
       }
-      uploaded += verified.photoCount; bytes += verified.totalBytes;
+      const verifyResponse = await fetch(`${STAGING_API_URL}/api/mobile/uploads/${item.runId}`, { headers: { authorization: `Bearer ${token}` } });
+      const verified = await verifyResponse.json();
+      if (!verifyResponse.ok || verified.confirmed?.length !== item.assetIds.length) {
+        throw new Error(`${category?.label || item.id}：${item.assetIds.length - (verified.confirmed?.length || 0)}枚が未送信です`);
+      }
+      uploaded += verified.confirmed.length; bytes += verified.totalBytes || 0;
       setUploadSummary({ requested: job.categories.reduce((sum, entry) => sum + entry.assetIds.length, 0), uploaded, bytes, preparationMs, uploadMs, automaticRetries });
     }
     setPassword("");
@@ -192,7 +208,7 @@ export default function App() {
     try {
       let deleted = 0;
       for (const item of uploadJob.categories) {
-        const response = await fetch(`${STAGING_API_URL}/api/mobile-test/runs/${item.runId}`, { method: "DELETE", headers: { authorization: `Bearer ${authToken}` } });
+        const response = await fetch(`${STAGING_API_URL}/api/mobile-test/production-contract/${item.runId}`, { method: "DELETE", headers: { authorization: `Bearer ${authToken}` } });
         const body = await response.json();
         if (!response.ok) throw new Error(body.error || "検証写真を削除できませんでした");
         deleted += body.deletedCount || 0;
