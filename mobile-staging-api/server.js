@@ -17,6 +17,16 @@ const TOKEN_TTL_SECONDS = 60 * 60;
 const LOGIN_WINDOW_MS = 15 * 60 * 1000;
 const MAX_LOGIN_ATTEMPTS = 5;
 const MOBILE_TEST_PREFIX = "_system/mobile-test/";
+const PRODUCTION_CONTRACT_PREFIX = `${MOBILE_TEST_PREFIX}production-contract/`;
+const PRESIGNED_URL_TTL_SECONDS = 5 * 60;
+const MAX_FILE_BYTES = 20 * 1024 * 1024;
+const MAX_REQUEST_BYTES = 100 * MAX_FILE_BYTES;
+const ALLOWED_PHOTO_IDS = new Set([
+  "photos_amenity",
+  "photos_general",
+  "photos_filter",
+  ...Array.from({ length: 8 }, (_, index) => `regular_${index + 1}`),
+]);
 
 function validateConfiguration() {
   if (REGION !== "ap-northeast-1") {
@@ -87,6 +97,50 @@ function validateUploadRequest(body) {
   );
 }
 
+function isSafeIdentifier(value, maxLength = 128) {
+  return (
+    typeof value === "string" &&
+    value.length >= 8 &&
+    value.length <= maxLength &&
+    /^[a-z0-9_-]+$/i.test(value)
+  );
+}
+
+function validateProductionUploadRequest(body) {
+  const { uploadId, date, site, staff, photoId, files } = body || {};
+  return (
+    isSafeIdentifier(uploadId, 64) &&
+    /^\d{4}-\d{2}-\d{2}$/.test(date || "") &&
+    isSafePathSegment(site) &&
+    isSafePathSegment(staff) &&
+    ALLOWED_PHOTO_IDS.has(photoId) &&
+    Array.isArray(files) &&
+    files.length >= 1 &&
+    files.length <= 100 &&
+    files.every(
+      (file) =>
+        isSafeIdentifier(file?.clientPhotoId) &&
+        file?.contentType === "image/jpeg" &&
+        Number.isInteger(file?.size) &&
+        file.size >= 1 &&
+        file.size <= MAX_FILE_BYTES,
+    ) &&
+    new Set(files.map((file) => file.clientPhotoId)).size === files.length &&
+    files.reduce((total, file) => total + file.size, 0) <= MAX_REQUEST_BYTES
+  );
+}
+
+function productionFilename(uploadId, clientPhotoId) {
+  return `mobile_${uploadId}_${clientPhotoId}.jpg`;
+}
+
+function clientPhotoIdFromFilename(uploadId, filename) {
+  const prefix = `mobile_${uploadId}_`;
+  return filename.startsWith(prefix) && filename.endsWith(".jpg")
+    ? filename.slice(prefix.length, -4)
+    : "";
+}
+
 function createApp({ s3 = new S3Client({ region: REGION }), signer = getSignedUrl } = {}) {
   validateConfiguration();
   const app = express();
@@ -133,13 +187,17 @@ function createApp({ s3 = new S3Client({ region: REGION }), signer = getSignedUr
     res.json({ token, expiresAt: Number(token.split(".")[0]) });
   });
 
-  app.use("/api/mobile-test", (req, res, next) => {
+  function requireMobileAuth(req, res, next) {
     const match = String(req.get("authorization") || "").match(/^Bearer\s+(.+)$/i);
     if (!match || !isValidToken(match[1])) {
       return res.status(401).json({ error: "ログインが必要です" });
     }
     next();
-  });
+  }
+
+  app.use("/api/mobile-test", requireMobileAuth);
+  app.use("/api/mobile/photos", requireMobileAuth);
+  app.use("/api/mobile/uploads", requireMobileAuth);
 
   async function listAllObjects(prefix) {
     const objects = [];
@@ -242,6 +300,89 @@ function createApp({ s3 = new S3Client({ region: REGION }), signer = getSignedUr
     }
   });
 
+  app.post("/api/mobile/photos/presigned-urls", async (req, res) => {
+    try {
+      if (!validateProductionUploadRequest(req.body)) {
+        return res.status(400).json({ error: "送信情報が不正です" });
+      }
+      const { uploadId, date, site, staff, photoId, files } = req.body;
+      const targets = await Promise.all(
+        files.map(async ({ clientPhotoId }) => {
+          const filename = productionFilename(uploadId, clientPhotoId);
+          const key = `${PRODUCTION_CONTRACT_PREFIX}${uploadId}/${date}/${site}/${staff}/${photoId}/${filename}`;
+          const uploadUrl = await signer(
+            s3,
+            new PutObjectCommand({
+              Bucket: BUCKET,
+              Key: key,
+              ContentType: "image/jpeg",
+            }),
+            { expiresIn: PRESIGNED_URL_TTL_SECONDS },
+          );
+          return { clientPhotoId, filename, key, uploadUrl };
+        }),
+      );
+      res.json({
+        uploadId,
+        expiresAt: Math.floor(Date.now() / 1000) + PRESIGNED_URL_TTL_SECONDS,
+        files: targets,
+      });
+    } catch (error) {
+      console.error("Mobile presigned URL generation failed", error?.name || "UnknownError");
+      res.status(500).json({ error: "送信URLを生成できませんでした" });
+    }
+  });
+
+  app.post("/api/mobile/photos/confirm", async (req, res) => {
+    try {
+      const uploadId = String(req.body?.uploadId || "");
+      const requested = Array.isArray(req.body?.photos)
+        ? req.body.photos.map((photo) => String(photo?.clientPhotoId || ""))
+        : [];
+      if (
+        !isSafeIdentifier(uploadId, 64) ||
+        requested.length < 1 ||
+        requested.length > 100 ||
+        requested.some((clientPhotoId) => !isSafeIdentifier(clientPhotoId)) ||
+        new Set(requested).size !== requested.length
+      ) {
+        return res.status(400).json({ error: "確定情報が不正です" });
+      }
+      const objects = await listAllObjects(`${PRODUCTION_CONTRACT_PREFIX}${uploadId}/`);
+      const stored = new Set(
+        objects
+          .map((item) => clientPhotoIdFromFilename(uploadId, item.Key?.split("/").pop() || ""))
+          .filter(Boolean),
+      );
+      res.json({
+        uploadId,
+        confirmed: requested.filter((clientPhotoId) => stored.has(clientPhotoId)),
+        missing: requested.filter((clientPhotoId) => !stored.has(clientPhotoId)),
+      });
+    } catch (error) {
+      console.error("Mobile upload confirmation failed", error?.name || "UnknownError");
+      res.status(500).json({ error: "送信結果を確定できませんでした" });
+    }
+  });
+
+  app.get("/api/mobile/uploads/:uploadId", async (req, res) => {
+    try {
+      const uploadId = String(req.params.uploadId || "");
+      if (!isSafeIdentifier(uploadId, 64)) {
+        return res.status(400).json({ error: "送信IDが不正です" });
+      }
+      const objects = await listAllObjects(`${PRODUCTION_CONTRACT_PREFIX}${uploadId}/`);
+      const confirmed = objects
+        .map((item) => clientPhotoIdFromFilename(uploadId, item.Key?.split("/").pop() || ""))
+        .filter(Boolean)
+        .sort();
+      res.json({ uploadId, confirmed });
+    } catch (error) {
+      console.error("Mobile upload lookup failed", error?.name || "UnknownError");
+      res.status(500).json({ error: "送信状態を確認できませんでした" });
+    }
+  });
+
   app.use((_req, res) => res.status(404).json({ error: "Not found" }));
   return app;
 }
@@ -255,8 +396,11 @@ module.exports = {
   createApp,
   createToken,
   isSafePathSegment,
+  isSafeIdentifier,
   isValidToken,
+  productionFilename,
   safeEqual,
   validateConfiguration,
+  validateProductionUploadRequest,
   validateUploadRequest,
 };
