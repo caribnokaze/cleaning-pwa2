@@ -95,6 +95,7 @@ export default function App() {
   const [password, setPassword] = useState("");
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [loginRetrySeconds, setLoginRetrySeconds] = useState(0);
   const [isRestoringSession, setIsRestoringSession] = useState(true);
   const [uploadJob, setUploadJob] = useState<UploadJob | null>(null);
   const [authToken, setAuthToken] = useState("");
@@ -148,6 +149,12 @@ export default function App() {
     void restoreSession();
   }, []);
 
+  useEffect(() => {
+    if (loginRetrySeconds <= 0) return;
+    const timer = setInterval(() => setLoginRetrySeconds((seconds) => Math.max(0, seconds - 1)), 1_000);
+    return () => clearInterval(timer);
+  }, [loginRetrySeconds > 0]);
+
   const visibleCategories = useMemo(() => CATEGORIES.filter((category) =>
     category.group === "normal" ||
     (category.group === "regular" && includesRegular(workType)) ||
@@ -183,6 +190,12 @@ export default function App() {
       method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ password }),
     });
     const body = await response.json();
+    if (response.status === 429) {
+      const retryAfter = Number.parseInt(response.headers.get("retry-after") || "", 10);
+      const waitSeconds = Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : 60;
+      setLoginRetrySeconds(waitSeconds);
+      throw new Error(`ログインが一時的に制限されています。${waitSeconds}秒後に再試行してください。`);
+    }
     if (!response.ok || !body.token || !Number.isFinite(body.expiresAt)) throw new Error(body.error || "検証環境へログインできませんでした");
     return { version: 1, token: body.token, expiresAt: body.expiresAt } satisfies AuthSession;
   };
@@ -201,7 +214,7 @@ export default function App() {
   };
 
   const submitLogin = async () => {
-    if (!password || isLoggingIn || BUILD_CONFIGURATION_ERROR) return;
+    if (!password || isLoggingIn || loginRetrySeconds > 0 || BUILD_CONFIGURATION_ERROR) return;
     setError(""); setIsLoggingIn(true);
     try {
       const session = await authenticate();
@@ -213,6 +226,7 @@ export default function App() {
     } catch (loginError) {
       setError(loginError instanceof Error ? loginError.message : String(loginError));
     } finally {
+      setPassword(""); setPasswordVisible(false);
       setIsLoggingIn(false);
     }
   };
@@ -352,7 +366,7 @@ export default function App() {
           <TextInput style={styles.passwordInput} value={password} onChangeText={setPassword} placeholder={IS_PRODUCTION ? "パスワード" : "検証環境のパスワード"} secureTextEntry={!passwordVisible} autoCapitalize="none" autoCorrect={false} editable={!isLoggingIn} onSubmitEditing={submitLogin} />
           {IS_PRODUCTION && <View style={styles.passwordHelp}><Pressable onPress={() => setPasswordVisible((visible) => !visible)} disabled={isLoggingIn}><Text style={styles.passwordToggle}>{passwordVisible ? "隠す" : "表示する"}</Text></Pressable></View>}
           {!!BUILD_CONFIGURATION_ERROR && <Text style={styles.error}>{BUILD_CONFIGURATION_ERROR}</Text>}
-          <PrimaryButton label={isRestoringSession ? "ログイン状態を確認中…" : isLoggingIn ? "ログイン中…" : "ログイン"} onPress={submitLogin} disabled={!password || isLoggingIn || isRestoringSession || !!BUILD_CONFIGURATION_ERROR} />
+          <PrimaryButton label={isRestoringSession ? "ログイン状態を確認中…" : isLoggingIn ? "ログイン中…" : loginRetrySeconds > 0 ? `再試行まで ${loginRetrySeconds}秒` : "ログイン"} onPress={submitLogin} disabled={!password || isLoggingIn || isRestoringSession || loginRetrySeconds > 0 || !!BUILD_CONFIGURATION_ERROR} />
         </>}
 
         {screen === "details" && <>
