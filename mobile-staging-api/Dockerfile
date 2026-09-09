@@ -10,7 +10,7 @@ ENV AWS_LWA_READINESS_CHECK_PATH=/health
 WORKDIR /var/task
 COPY package*.json ./
 RUN npm ci --omit=dev
-COPY server.js ./
+COPY server.js start.js ./
 
 EXPOSE 8080
-CMD ["node", "server.js"]
+CMD ["node", "start.js"]
