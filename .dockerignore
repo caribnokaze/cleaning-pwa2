@@ -1,0 +1,10 @@
+.env
+.env.*
+.git
+.gitignore
+node_modules
+**/node_modules
+mobile
+mobile-free
+.expo*
+npm-debug.log*
