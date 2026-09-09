@@ -290,6 +290,20 @@ function isSafePathSegment(value) {
   );
 }
 
+const ALLOWED_PHOTO_IDS = new Set([
+  "photos_amenity",
+  "photos_general",
+  "photos_filter",
+  "photos_kitchen",
+  "photos_bath",
+  "photos_living",
+  "photos_bedroom",
+  "photos_hallway",
+  "photos_equipment",
+  "photos_others",
+  ...Array.from({ length: 8 }, (_, index) => `regular_${index + 1}`),
+]);
+
 function matchesReportScope(key, scope) {
   if (!scope) return true;
   const photoId = key.split("/")[3] || "";
@@ -297,38 +311,6 @@ function matchesReportScope(key, scope) {
     photoId.startsWith("regular_") || photoId === "photos_filter";
   return scope === "special" ? isSpecial : !isSpecial;
 }
-
-// スマホから「このファイル名でアップロードしたい」という要求を受け付ける
-app.post("/get-presigned-url", async (req, res) => {
-  try {
-    const { filename, contentType, date, site, staff, label, photoId } =
-      req.body;
-
-    if (!filename) {
-      return res.status(400).json({ error: "Filename is required" });
-    }
-
-    // 保存先のキー（フォルダ構成）
-    const key = `${date}/${site}/${staff}/${photoId}/${filename}`;
-
-    // S3へアップロードする設定
-    const command = new PutObjectCommand({
-      Bucket: BUCKET_NAME,
-      Key: key,
-      ContentType: contentType || "image/jpeg",
-    });
-
-    // 5分間だけ有効なアップロード用URL（通行証）を生成
-    const uploadUrl = await getSignedUrl(s3Client, command, { expiresIn: 300 });
-
-    const fileUrl = `https://${BUCKET_NAME}.s3.${AWS_REGION}.amazonaws.com/${key}`;
-
-    res.json({ uploadUrl, fileUrl });
-  } catch (err) {
-    console.error("S3用のURL生成に失敗しました:", err);
-    res.status(500).json({ error: "Failed to generate signed URL" });
-  }
-});
 
 app.post("/get-presigned-urls", async (req, res) => {
   try {
@@ -354,7 +336,7 @@ app.post("/get-presigned-urls", async (req, res) => {
           !/^(?:\d{3}|add_\d{13}_\d{3})(?:_\d+min)?\.jpg$/i.test(
             filename || "",
           ) ||
-          !/^[a-z0-9_]+$/i.test(photoId || "")
+          !ALLOWED_PHOTO_IDS.has(photoId)
         ) {
           throw new Error("Invalid upload filename or category");
         }
