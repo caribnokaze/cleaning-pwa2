@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "TOCORO Photo Prototype",
+    "name": "TOCORO 清掃写真報告",
     "slug": "tocoro-photo-prototype",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -8,13 +8,11 @@
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.tocoro.cleaning.photo-prototype",
       "infoPlist": {
         "NSPhotoLibraryUsageDescription": "清掃写真を選択してアップロードするために写真ライブラリを使用します。"
       }
     },
     "android": {
-      "package": "com.tocoro.cleaning.photo_prototype",
       "permissions": [
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.READ_MEDIA_IMAGES"
@@ -29,6 +27,9 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "plugins": [
+      "expo-secure-store"
+    ]
   }
 }

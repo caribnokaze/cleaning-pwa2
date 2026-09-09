@@ -59,15 +59,29 @@ ReleaseビルドではJavaScript bundleをアプリへ含められるため、�
 
 ## 現場情報付きステージング試験
 
-検証API URLはリポジトリへ固定せず、Git管理外の`mobile/.env.local`に設定します。
+検証API URLとビルド種別はリポジトリへ固定せず、Git管理外の`mobile/.env.local`に設定します。
 
 ```bash
 cp .env.example .env.local
 ```
 
 ```env
-EXPO_PUBLIC_MOBILE_STAGING_API_URL=https://your-staging-api.example
+EXPO_PUBLIC_APP_ENV=preview
+EXPO_PUBLIC_MOBILE_API_URL=https://your-staging-api.example
 ```
+
+`preview`は検証専用Lambda以外を指定するとビルド時および起動時に停止します。
+`production`は明示的な承認フラグ、本番API URL、iOS・Androidの正式アプリIDが
+すべて設定されるまでビルドできません。現時点では本番設定を有効化しません。
+
+| ビルド種別 | 接続先 | 検証削除・性能計測 |
+|---|---|---|
+| `development` | ローカルまたは検証API | 表示する |
+| `preview` | 検証専用APIのみ | 表示する |
+| `production` | 承認済み本番APIのみ | 表示しない |
+
+EAS Buildの各profileは`EXPO_PUBLIC_APP_ENV`を固定しています。API URLはEASの
+環境変数として別途設定し、ソースやGitへ秘密値を保存しません。
 
 1. 撮影日、現場名、担当者名を入力する
 2. 独自高速ピッカーで写真を選択する
@@ -78,14 +92,27 @@ EXPO_PUBLIC_MOBILE_STAGING_API_URL=https://your-staging-api.example
 写真は本番とは分離した`_system/mobile-test/`へ保存されます。確認前にアプリを
 終了した場合も、S3ライフサイクルにより1日後に自動削除されます。
 
+正式版UIのpreview検証送信は、本番予定のAPI契約
+`/api/mobile/photos/presigned-urls`、`/api/mobile/photos/confirm`、
+`/api/mobile/uploads/:uploadId`を使用します。保存先は引き続き検証S3の
+`_system/mobile-test/production-contract/`配下に固定され、本番へは送信しません。
+確認後の即時削除だけは検証専用APIを使用します。
+
+共通パスワードはアプリ起動時のログイン画面で入力します。ログイン成功後は入力値を
+メモリから消去し、端末へ保存しません。認証トークンと有効期限だけをiOS Keychain／
+Android Keystoreで保護されたSecureStoreへ保存します。有効期限内にアプリを再起動した
+場合はログイン状態を復元し、期限切れ、401応答、またはログアウト時に削除します。
+本番予定の認証期限は72時間、5回連続失敗時のログイン制限は10分です。
+
 ## 中断復帰
 
 送信開始前に、実行ID・写真ID・撮影日・現場名・担当者名を端末へ保存します。
 アプリ終了や通信切断の後はS3の保存済みファイル名を照合し、未送信写真だけを
 再準備・再送します。この制御はReact Native側にあり、iOSとAndroidで共通利用します。
 
-パスワード、認証トークン、署名付きURLは端末へ保存しません。復帰時には検証環境の
-パスワードを再入力します。ジョブ情報は検証写真の削除成功後に端末から削除されます。
+パスワードと署名付きURLは端末へ保存しません。認証トークンはSecureStoreにだけ保存し、
+AsyncStorageには保存しません。ジョブ情報は検証写真の削除成功後に端末から削除されます。
+ログアウトしても未完了ジョブは削除せず、次回ログイン後に再開できます。
 
 実機では100枚中90枚を保存した状態でアプリを完全終了し、再起動後に未送信10枚だけを
 再開しました。最終的に100枚の保存を照合し、検証S3から100枚を削除済みです。
