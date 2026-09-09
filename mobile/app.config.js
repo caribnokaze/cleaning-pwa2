@@ -1,4 +1,7 @@
 const STAGING_API_ORIGIN = "https://bjm3jjmvgw2s3ztryzevgvyzx40sztln.lambda-url.ap-northeast-1.on.aws";
+const PRODUCTION_APP_NAME = "TOCORO. 清掃写真報告";
+const PRODUCTION_IOS_BUNDLE_ID = "com.tocoro.cleaning.photo-report";
+const PRODUCTION_ANDROID_PACKAGE = "com.tocoro.cleaning.photo_report";
 const APP_ENVIRONMENTS = new Set(["development", "preview", "production"]);
 
 const normalizedOrigin = (value) => {
@@ -31,24 +34,21 @@ module.exports = ({ config }) => {
     if (apiOrigin === STAGING_API_ORIGIN) {
       throw new Error("Production builds may not connect to the mobile staging API.");
     }
-    if (!process.env.MOBILE_PRODUCTION_IOS_BUNDLE_ID || !process.env.MOBILE_PRODUCTION_ANDROID_PACKAGE) {
-      throw new Error("Production bundle identifiers have not been approved and configured.");
-    }
   }
 
   return {
     ...config,
-    name: isProduction ? "TOCORO 清掃写真報告" : "TOCORO 清掃写真報告（検証）",
+    name: isProduction ? PRODUCTION_APP_NAME : "TOCORO 清掃写真報告（検証）",
     ios: {
       ...config.ios,
       bundleIdentifier: isProduction
-        ? process.env.MOBILE_PRODUCTION_IOS_BUNDLE_ID
+        ? PRODUCTION_IOS_BUNDLE_ID
         : "com.tocoro.cleaning.photo-prototype",
     },
     android: {
       ...config.android,
       package: isProduction
-        ? process.env.MOBILE_PRODUCTION_ANDROID_PACKAGE
+        ? PRODUCTION_ANDROID_PACKAGE
         : "com.tocoro.cleaning.photo_prototype",
     },
     extra: { ...config.extra, appEnvironment },

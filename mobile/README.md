@@ -71,8 +71,17 @@ EXPO_PUBLIC_MOBILE_API_URL=https://your-staging-api.example
 ```
 
 `preview`は検証専用Lambda以外を指定するとビルド時および起動時に停止します。
-`production`は明示的な承認フラグ、本番API URL、iOS・Androidの正式アプリIDが
-すべて設定されるまでビルドできません。現時点では本番設定を有効化しません。
+`production`は明示的な承認フラグと本番API URLが設定されるまでビルドできません。
+現時点では本番設定を有効化しません。
+
+正式アプリIDは次の値で確定し、`app.config.js`に固定しています。
+
+- アプリ名: `TOCORO. 清掃写真報告`
+- iPhone Bundle ID: `com.tocoro.cleaning.photo-report`
+- Android application ID: `com.tocoro.cleaning.photo_report`
+
+本番API URLはソースへ固定しません。`EXPO_PUBLIC_MOBILE_API_URL`で渡し、
+`MOBILE_PRODUCTION_APPROVED=true`が明示された場合だけproductionビルドを許可します。
 
 | ビルド種別 | 接続先 | 検証削除・性能計測 |
 |---|---|---|
