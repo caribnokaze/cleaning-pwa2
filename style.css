@@ -36,6 +36,7 @@ h2 {
 /* フォーム共通 */
 .form-group {
   margin-bottom: 16px;
+  min-width: 0;
 }
 
 label {
@@ -49,7 +50,10 @@ input,
 select,
 button {
   width: 100%;
+  max-width: 100%;
+  min-width: 0;
   font-size: 18px;
+  font-family: inherit;
   padding: 14px;
   margin: 8px 0;
   border: 1px solid #ccc;
@@ -76,6 +80,71 @@ select {
 /* 日付入力 */
 input[type="date"] {
   min-height: 54px;
+  line-height: 1.2;
+  text-align: left;
+}
+
+.searchable-select {
+  position: relative;
+}
+
+#siteOptions,
+#staffOptions,
+input#site,
+input#staff {
+  display: none;
+}
+
+.searchable-select-options {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% - 8px);
+  right: 0;
+  left: 0;
+  max-height: 260px;
+  overflow-y: auto;
+  border: 1px solid #bbb;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.16);
+}
+
+.searchable-select-options[hidden] {
+  display: none;
+}
+
+button.searchable-select-option {
+  width: 100%;
+  margin: 0;
+  padding: 12px 14px;
+  border: 0;
+  border-bottom: 1px solid #eee;
+  border-radius: 0;
+  background: #fff;
+  color: #222;
+  font-weight: normal;
+  text-align: left;
+}
+
+button.searchable-select-option:last-child {
+  border-bottom: 0;
+}
+
+button.searchable-select-option:hover,
+button.searchable-select-option.is-active {
+  background: #eaf2ff;
+}
+
+/* iPhone Safariの日付欄の余白と位置を揃える */
+input[type="date"]::-webkit-date-and-time-value {
+  margin: 0;
+  text-align: left;
+}
+
+input[type="date"]::-webkit-datetime-edit {
+  display: flex;
+  align-items: center;
+  padding: 0;
 }
 
 /* ファイル選択 */
@@ -83,6 +152,61 @@ input[type="file"] {
   padding: 10px;
   border: 1px dashed #aaa;
   background: #fafafa;
+}
+
+.photo-preview-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+  gap: 8px;
+  margin: 4px 0 12px;
+}
+
+.photo-preview-item {
+  position: relative;
+  overflow: hidden;
+  aspect-ratio: 1;
+  border-radius: 8px;
+  background: #e9ecef;
+}
+
+.photo-preview-item img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+}
+
+.photo-preview-item span {
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  left: 3px;
+  padding: 3px 2px;
+  border-radius: 4px;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.68);
+  font-size: 10px;
+  line-height: 1.2;
+  text-align: center;
+}
+
+.photo-preview-item.is-ready span {
+  background: rgba(31, 126, 55, 0.88);
+}
+
+.photo-preview-item.has-error span {
+  background: rgba(198, 40, 40, 0.88);
+}
+
+.photo-preview-remaining {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 7px 9px;
+  border-radius: 6px;
+  background: #eef5f2;
+  color: #356356;
+  font-size: 13px;
+  text-align: center;
 }
 
 /* ボタン */
@@ -176,4 +300,17 @@ input[type="radio"] {
   color: #666;
   display: block;
   margin-bottom: 5px;
+}
+
+@media (max-width: 540px) {
+  body {
+    padding: 8px;
+  }
+
+  .container {
+    padding: 18px 16px;
+  }
+}
+.logout-link {
+  color: #c62828;
 }

@@ -1,0 +1,77 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "EcrDeployment",
+      "Effect": "Allow",
+      "Action": [
+        "ecr:GetAuthorizationToken",
+        "ecr:DescribeRepositories",
+        "ecr:CreateRepository",
+        "ecr:BatchCheckLayerAvailability",
+        "ecr:GetDownloadUrlForLayer",
+        "ecr:InitiateLayerUpload",
+        "ecr:UploadLayerPart",
+        "ecr:CompleteLayerUpload",
+        "ecr:PutImage"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "AppRunnerDeployment",
+      "Effect": "Allow",
+      "Action": [
+        "apprunner:ListServices",
+        "apprunner:CreateService",
+        "apprunner:UpdateService",
+        "apprunner:DescribeService"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "DeploymentRoles",
+      "Effect": "Allow",
+      "Action": [
+        "iam:GetRole",
+        "iam:CreateRole",
+        "iam:AttachRolePolicy",
+        "iam:PutRolePolicy",
+        "iam:PassRole"
+      ],
+      "Resource": [
+        "arn:aws:iam::881224647732:role/TocoroCleaningAppRunnerEcrRole",
+        "arn:aws:iam::881224647732:role/TocoroCleaningAppRunnerInstanceRole"
+      ]
+    },
+    {
+      "Sid": "AppRunnerServiceLinkedRole",
+      "Effect": "Allow",
+      "Action": "iam:CreateServiceLinkedRole",
+      "Resource": "arn:aws:iam::*:role/aws-service-role/apprunner.amazonaws.com/AWSServiceRoleForAppRunner",
+      "Condition": {
+        "StringEquals": {
+          "iam:AWSServiceName": "apprunner.amazonaws.com"
+        }
+      }
+    },
+    {
+      "Sid": "DeploymentSecrets",
+      "Effect": "Allow",
+      "Action": [
+        "secretsmanager:DescribeSecret",
+        "secretsmanager:CreateSecret",
+        "secretsmanager:PutSecretValue"
+      ],
+      "Resource": "arn:aws:secretsmanager:ap-northeast-1:881224647732:secret:tocoro-cleaning/*"
+    },
+    {
+      "Sid": "BucketCors",
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetBucketCORS",
+        "s3:PutBucketCORS"
+      ],
+      "Resource": "arn:aws:s3:::tocoro-cleaning-report-881224647732-ap-northeast-1-an"
+    }
+  ]
+}
