@@ -18,7 +18,9 @@
     },
     "production": {
       "env": {
-        "EXPO_PUBLIC_APP_ENV": "production"
+        "EXPO_PUBLIC_APP_ENV": "production",
+        "EXPO_PUBLIC_MOBILE_API_URL": "https://tocoro-report.com",
+        "MOBILE_PRODUCTION_APPROVED": "true"
       }
     }
   }
