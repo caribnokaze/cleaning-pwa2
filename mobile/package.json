@@ -4,13 +4,16 @@
   "main": "index.ts",
   "dependencies": {
     "@react-native-async-storage/async-storage": "^3.1.1",
+    "@react-native-community/datetimepicker": "9.1.0",
+    "@react-native-picker/picker": "2.11.4",
     "expo": "~57.0.11",
     "expo-dev-client": "~57.0.10",
     "expo-secure-store": "~57.0.3",
     "expo-status-bar": "~57.0.1",
     "fast-photo-picker": "file:./modules/fast-photo-picker",
     "react": "19.2.3",
-    "react-native": "0.86.2"
+    "react-native": "0.86.2",
+    "wanakana": "^5.3.1"
   },
   "devDependencies": {
     "@types/react": "~19.2.2",
