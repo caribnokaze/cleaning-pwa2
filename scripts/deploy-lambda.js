@@ -1,4 +1,5 @@
-const DEPLOY_TARGET = process.env.DEPLOY_TARGET || "production";
+const DEPLOY_TARGET = process.env.DEPLOY_TARGET || "";
+const PRODUCTION_DEPLOY_APPROVED = process.env.PRODUCTION_DEPLOY_APPROVED || "";
 const IS_MOBILE_STAGING = DEPLOY_TARGET === "mobile-staging";
 if (!IS_MOBILE_STAGING && DEPLOY_TARGET !== "production") {
   throw new Error(`未対応のDEPLOY_TARGETです: ${DEPLOY_TARGET}`);
@@ -6,6 +7,10 @@ if (!IS_MOBILE_STAGING && DEPLOY_TARGET !== "production") {
 require("dotenv").config({
   path: IS_MOBILE_STAGING ? ".env.mobile-staging" : ".env",
 });
+const {
+  validateProductionAccount,
+  validateProductionConfiguration,
+} = require("./production-deploy-safety");
 const { spawnSync } = require("child_process");
 const {
   STSClient,
@@ -75,15 +80,26 @@ const AUTH_SECRET_NAME = IS_MOBILE_STAGING
   ? "tocoro-mobile-staging/auth-secret"
   : "tocoro-cleaning/auth-secret";
 const IMAGE_TAG = "latest";
+const IS_PREFLIGHT = process.argv.includes("--preflight");
 
-if (!process.env.APP_PASSWORD || !process.env.AUTH_SECRET) {
+if (!IS_MOBILE_STAGING) {
+  validateProductionConfiguration({
+    deployTarget: DEPLOY_TARGET,
+    region: REGION,
+    bucket: BUCKET,
+    approved: PRODUCTION_DEPLOY_APPROVED,
+    preflight: IS_PREFLIGHT,
+  });
+}
+
+if (!IS_PREFLIGHT && (!process.env.APP_PASSWORD || !process.env.AUTH_SECRET)) {
   throw new Error(
     ".envにAPP_PASSWORDとAUTH_SECRETを設定してください。",
   );
 }
 if (
-  process.env.APP_PASSWORD.length < 8 ||
-  process.env.AUTH_SECRET.length < 32
+  !IS_PREFLIGHT &&
+  (process.env.APP_PASSWORD.length < 8 || process.env.AUTH_SECRET.length < 32)
 ) {
   throw new Error(
     "APP_PASSWORDは8文字以上、AUTH_SECRETは32文字以上にしてください。",
@@ -510,6 +526,28 @@ async function main() {
       );
     }
     console.log("Deploy target: isolated mobile staging");
+  } else {
+    validateProductionAccount(identity.Account);
+  }
+
+  if (IS_PREFLIGHT) {
+    await clients.s3.send(new HeadBucketCommand({ Bucket: BUCKET }));
+    const repository = await clients.ecr.send(
+      new DescribeRepositoriesCommand({ repositoryNames: [REPOSITORY_NAME] }),
+    );
+    const fn = await clients.lambda.send(
+      new GetFunctionConfigurationCommand({ FunctionName: FUNCTION_NAME }),
+    );
+    await Promise.all([
+      clients.iam.send(new GetRoleCommand({ RoleName: ROLE_NAME })),
+      clients.secrets.send(new DescribeSecretCommand({ SecretId: APP_PASSWORD_SECRET })),
+      clients.secrets.send(new DescribeSecretCommand({ SecretId: AUTH_SECRET_NAME })),
+    ]);
+    if (!repository.repositories?.[0] || fn.State !== "Active") {
+      throw new Error("本番Lambdaの既存リソースが利用可能な状態ではありません。");
+    }
+    console.log("Preflight OK: Lambda構成を読み取り確認しました。変更はありません。");
+    return;
   }
 
   await ensureBucket();
