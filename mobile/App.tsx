@@ -7,9 +7,10 @@ import { useEffect, useMemo, useState } from "react";
 import { Modal, Platform, Pressable, SafeAreaView, ScrollView, StatusBar as NativeStatusBar, StyleSheet, Text, TextInput, View } from "react-native";
 import { toHiragana, toRomaji } from "wanakana";
 import FastPhotoPicker, { PhotoPickerResult, PhotoUploadResult } from "./modules/fast-photo-picker/src";
+import GalleryScreen from "./GalleryScreen";
 
 type WorkType = "normal" | "full" | "regular" | "filter";
-type Screen = "login" | "details" | "photos" | "review";
+type Screen = "login" | "details" | "photos" | "review" | "gallery";
 type Category = { id: string; label: string; hint?: string; group: "normal" | "regular" | "filter"; min: number; max: number };
 type UploadCategory = { id: string; runId: string; assetIds: string[] };
 type UploadJob = { version: 1; date: string; site: string; staff: string; workType: WorkType; workTime: string; categories: UploadCategory[]; createdAt: string };
@@ -165,6 +166,7 @@ export default function App() {
   const [authToken, setAuthToken] = useState("");
   const [isUploading, setIsUploading] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isGalleryBusy, setIsGalleryBusy] = useState(false);
   const [uploadPhase, setUploadPhase] = useState("");
   const [uploadSummary, setUploadSummary] = useState<UploadSummary | null>(null);
   const [uploadProgress, setUploadProgress] = useState<UploadProgress | null>(null);
@@ -481,8 +483,8 @@ export default function App() {
   return (
     <SafeAreaView style={[styles.safeArea, Platform.OS === "android" && styles.androidSafeArea]}>
       <ExpoStatusBar style="dark" />
-      <View style={styles.header}><Text style={styles.brand}>TOCORO.</Text><Text style={styles.headerTitle}>清掃写真報告</Text>{IS_STAGING_BUILD && <View style={styles.headerEnvironmentBadge}><Text style={styles.headerEnvironmentText}>検証環境</Text></View>}{screen !== "login" && <Pressable style={styles.logoutButton} onPress={logout} disabled={isUploading || isDeleting}><Text style={styles.logoutText}>ログアウト</Text></Pressable>}</View>
-      {screen !== "login" && <View style={styles.steps}>
+      <View style={styles.header}><Text style={styles.brand}>TOCORO.</Text><Text style={styles.headerTitle}>清掃写真報告</Text>{IS_STAGING_BUILD && <View style={styles.headerEnvironmentBadge}><Text style={styles.headerEnvironmentText}>検証環境</Text></View>}{screen !== "login" && <Pressable style={[styles.galleryNavButton, isGalleryBusy && styles.buttonDisabled]} onPress={() => setScreen(screen === "gallery" ? (uploadJob ? "review" : "details") : "gallery")} disabled={isUploading || isDeleting || isGalleryBusy}><Text style={styles.galleryNavText}>{screen === "gallery" ? "報告入力" : "写真一覧"}</Text></Pressable>}{screen !== "login" && <Pressable style={[styles.logoutButton, isGalleryBusy && styles.buttonDisabled]} onPress={logout} disabled={isUploading || isDeleting || isGalleryBusy}><Text style={styles.logoutText}>ログアウト</Text></Pressable>}</View>
+      {screen !== "login" && screen !== "gallery" && <View style={styles.steps}>
         {(["details", "photos", "review"] as Screen[]).map((step, index) => (
           <View key={step} style={styles.stepItem}>
             <View style={[styles.stepCircle, screen === step && styles.stepCircleActive]}><Text style={[styles.stepNumber, screen === step && styles.stepNumberActive]}>{index + 1}</Text></View>
@@ -490,7 +492,7 @@ export default function App() {
           </View>
         ))}
       </View>}
-      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+      {screen === "gallery" ? <GalleryScreen apiUrl={API_URL} authToken={authToken} onSessionExpired={() => { void clearAuthSession(); setScreen("login"); }} onBusyChange={setIsGalleryBusy} /> : <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
         {screen === "login" && <>
           <Text style={styles.title}>ログイン</Text>
           <Text style={styles.description}>清掃写真報告を始めるため、共通パスワードを入力してください。パスワードは端末へ保存しません。</Text>
@@ -599,7 +601,7 @@ export default function App() {
           {IS_STAGING_BUILD && !!uploadJob && !!authToken && uploadSummary?.uploaded === uploadSummary?.requested && <Pressable style={[styles.deleteButton, isDeleting && styles.buttonDisabled]} onPress={deleteUpload} disabled={isDeleting}><Text style={styles.primaryButtonText}>{isDeleting ? "削除中…" : "確認済みのテスト写真を削除"}</Text></Pressable>}
         </>}
         {!!error && <Text style={styles.error}>{error}</Text>}
-      </ScrollView>
+      </ScrollView>}
     </SafeAreaView>
   );
 }
@@ -717,6 +719,8 @@ const styles = StyleSheet.create({
   headerEnvironmentText: { color: "#765200", fontSize: 10, fontWeight: "900" },
   logoutButton: { paddingVertical: 7, paddingHorizontal: 9, borderRadius: 8, borderWidth: 1, borderColor: "#9db0aa" },
   logoutText: { color: "#36564e", fontSize: 12, fontWeight: "800" },
+  galleryNavButton: { marginRight: 7, paddingVertical: 7, paddingHorizontal: 9, borderRadius: 8, backgroundColor: "#16745e" },
+  galleryNavText: { color: "#fff", fontSize: 12, fontWeight: "800" },
   steps: { flexDirection: "row", justifyContent: "space-around", paddingVertical: 12, backgroundColor: "#fff" },
   stepItem: { flexDirection: "row", alignItems: "center" },
   stepCircle: { width: 24, height: 24, borderRadius: 12, alignItems: "center", justifyContent: "center", backgroundColor: "#e4ebe8", marginRight: 6 },
