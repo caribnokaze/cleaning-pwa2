@@ -1,6 +1,6 @@
 const STAGING_API_ORIGIN = "https://bjm3jjmvgw2s3ztryzevgvyzx40sztln.lambda-url.ap-northeast-1.on.aws";
 const PRODUCTION_APP_NAME = "TOCORO. 清掃写真報告";
-const PRODUCTION_IOS_BUNDLE_ID = "com.tocoro.cleaning.photo-report";
+const PRODUCTION_IOS_BUNDLE_ID = "com.tocoro.cleaning.photoreport";
 const PRODUCTION_ANDROID_PACKAGE = "com.tocoro.cleaning.photo_report";
 const APP_ENVIRONMENTS = new Set(["development", "preview", "production"]);
 

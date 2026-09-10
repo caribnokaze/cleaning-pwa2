@@ -8,11 +8,14 @@
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": false,
+      "buildNumber": "1",
       "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
         "NSPhotoLibraryUsageDescription": "清掃写真を選択してアップロードするために写真ライブラリを使用します。"
       }
     },
     "android": {
+      "versionCode": 1,
       "permissions": [
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.READ_MEDIA_IMAGES"
