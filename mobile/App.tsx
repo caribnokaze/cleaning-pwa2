@@ -1,10 +1,10 @@
-import { StatusBar } from "expo-status-bar";
+import { StatusBar as ExpoStatusBar } from "expo-status-bar";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import DateTimePicker, { DateTimePickerEvent } from "@react-native-community/datetimepicker";
 import { Picker } from "@react-native-picker/picker";
 import * as SecureStore from "expo-secure-store";
 import { useEffect, useMemo, useState } from "react";
-import { Modal, Platform, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Modal, Platform, Pressable, SafeAreaView, ScrollView, StatusBar as NativeStatusBar, StyleSheet, Text, TextInput, View } from "react-native";
 import { toHiragana, toRomaji } from "wanakana";
 import FastPhotoPicker, { PhotoPickerResult } from "./modules/fast-photo-picker/src";
 
@@ -461,8 +461,8 @@ export default function App() {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar style="dark" />
+    <SafeAreaView style={[styles.safeArea, Platform.OS === "android" && styles.androidSafeArea]}>
+      <ExpoStatusBar style="dark" />
       <View style={styles.header}><Text style={styles.brand}>TOCORO.</Text><Text style={styles.headerTitle}>清掃写真報告</Text>{IS_STAGING_BUILD && <View style={styles.headerEnvironmentBadge}><Text style={styles.headerEnvironmentText}>検証環境</Text></View>}{screen !== "login" && <Pressable style={styles.logoutButton} onPress={logout} disabled={isUploading || isDeleting}><Text style={styles.logoutText}>ログアウト</Text></Pressable>}</View>
       {screen !== "login" && <View style={styles.steps}>
         {(["details", "photos", "review"] as Screen[]).map((step, index) => (
@@ -687,6 +687,7 @@ function ReviewLine({ label, value, strong }: { label: string; value: string; st
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: "#f5f7f6" },
+  androidSafeArea: { paddingTop: NativeStatusBar.currentHeight ?? 0 },
   header: { paddingHorizontal: 20, paddingTop: 12, paddingBottom: 10, flexDirection: "row", alignItems: "center", backgroundColor: "#fff", borderBottomWidth: 1, borderBottomColor: "#dce4e1" },
   brand: { fontSize: 23, fontWeight: "900", color: "#12634f", marginRight: 10 },
   headerTitle: { flex: 1, fontSize: 16, fontWeight: "700", color: "#36564e" },
@@ -704,7 +705,7 @@ const styles = StyleSheet.create({
   selectInputRow: { flexDirection: "row", alignItems: "stretch", gap: 7 },
   selectSearchInput: { flex: 1 },
   selectPickerButton: { width: 50, borderWidth: 1, borderColor: "#aebcb7", borderRadius: 10, backgroundColor: "#fff", alignItems: "center", justifyContent: "center" },
-  selectPickerButtonText: { color: "#16745e", fontSize: 25, fontWeight: "800", marginTop: -5 },
+  selectPickerButtonText: { color: "#16745e", fontSize: 25, fontWeight: "800", marginTop: -5, transform: [{ translateY: -3 }] },
   pickerOverlay: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.35)" },
   pickerSheet: { backgroundColor: "#fff", borderTopLeftRadius: 18, borderTopRightRadius: 18, paddingTop: 18, paddingHorizontal: 18, paddingBottom: 28 },
   pickerTitle: { color: "#173c33", fontSize: 18, fontWeight: "900", textAlign: "center", marginBottom: 4 },
