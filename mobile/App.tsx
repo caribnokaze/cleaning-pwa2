@@ -170,6 +170,7 @@ export default function App() {
   const [uploadPhase, setUploadPhase] = useState("");
   const [uploadSummary, setUploadSummary] = useState<UploadSummary | null>(null);
   const [uploadProgress, setUploadProgress] = useState<UploadProgress | null>(null);
+  const [completionVisible, setCompletionVisible] = useState(false);
   const [reportOptions, setReportOptions] = useState<ReportOptions | null>(null);
   const [optionsLoading, setOptionsLoading] = useState(false);
   const [optionsReload, setOptionsReload] = useState(0);
@@ -437,6 +438,18 @@ export default function App() {
     } else {
       await AsyncStorage.removeItem(UPLOAD_JOB_KEY); setUploadJob(null);
       setUploadPhase("全カテゴリーの送信が完了しました。");
+      setCompletionVisible(true);
+      await new Promise((resolve) => setTimeout(resolve, 2_000));
+      setSiteName("");
+      setWorkType("normal");
+      setWorkTime("");
+      setSelections({});
+      setUploadSummary(null);
+      setUploadProgress(null);
+      setUploadPhase("");
+      setError("");
+      setScreen("details");
+      setCompletionVisible(false);
     }
   };
 
@@ -547,8 +560,7 @@ export default function App() {
         </>}
 
         {screen === "photos" && <>
-          <Text style={styles.title}>カテゴリーごとに写真を選択</Text>
-          <Text style={styles.description}>カテゴリーを押すと、3列の独自高速ピッカーが開きます。</Text>
+          <Text style={[styles.title, styles.photoSelectionTitle]}>カテゴリーごとに写真を選択</Text>
           <View style={styles.summaryCard}><Text style={styles.summaryText}>{cleaningDate}　{siteName}</Text><Text style={styles.summarySub}>{staffName}　／　{WORK_TYPES.find((item) => item.id === workType)?.label}</Text></View>
           {(["normal", "regular", "filter"] as const).map((group) => {
             const groupCategories = visibleCategories.filter((category) => category.group === group);
@@ -602,6 +614,14 @@ export default function App() {
         </>}
         {!!error && <Text style={styles.error}>{error}</Text>}
       </ScrollView>}
+      <Modal visible={completionVisible} transparent animationType="fade" statusBarTranslucent>
+        <View style={styles.completionOverlay} accessibilityRole="alert">
+          <View style={styles.completionCard}>
+            <Text style={styles.completionIcon}>✓</Text>
+            <Text style={styles.completionText}>お疲れ様でした！</Text>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -726,6 +746,7 @@ const styles = StyleSheet.create({
   stepCircle: { width: 24, height: 24, borderRadius: 12, alignItems: "center", justifyContent: "center", backgroundColor: "#e4ebe8", marginRight: 6 },
   stepCircleActive: { backgroundColor: "#16745e" }, stepNumber: { fontSize: 12, fontWeight: "800", color: "#60706c" }, stepNumberActive: { color: "#fff" }, stepLabel: { fontSize: 12, color: "#788781" }, stepLabelActive: { color: "#16745e", fontWeight: "800" },
   container: { padding: 20, paddingBottom: 48 }, title: { fontSize: 24, fontWeight: "900", color: "#173c33", marginTop: 4 }, description: { fontSize: 14, lineHeight: 21, color: "#60706c", marginTop: 8, marginBottom: 20 },
+  photoSelectionTitle: { marginBottom: 20 },
   field: { marginBottom: 17 }, sectionLabel: { color: "#294b42", fontSize: 15, fontWeight: "800", marginBottom: 8 }, required: { color: "#b42318", fontSize: 11 },
   input: { borderWidth: 1, borderColor: "#aebcb7", borderRadius: 10, paddingHorizontal: 14, paddingVertical: 13, fontSize: 16, backgroundColor: "#fff" },
   selectInputRow: { flexDirection: "row", alignItems: "stretch", gap: 7 },
@@ -776,4 +797,8 @@ const styles = StyleSheet.create({
   uploadResult: { marginTop: 16, padding: 16, borderRadius: 12, backgroundColor: "#fff", borderWidth: 1, borderColor: "#bcd8cf" },
   deleteButton: { marginTop: 12, minHeight: 52, borderRadius: 12, backgroundColor: "#9b2c2c", alignItems: "center", justifyContent: "center", paddingHorizontal: 18 },
   error: { marginTop: 18, color: "#b42318", fontSize: 14, lineHeight: 20 },
+  completionOverlay: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(19, 49, 41, 0.5)", padding: 24 },
+  completionCard: { width: "100%", maxWidth: 340, paddingVertical: 38, paddingHorizontal: 24, borderRadius: 18, alignItems: "center", backgroundColor: "#fff" },
+  completionIcon: { width: 58, height: 58, paddingTop: 10, borderRadius: 29, overflow: "hidden", textAlign: "center", backgroundColor: "#16745e", color: "#fff", fontSize: 28, fontWeight: "900", marginBottom: 16 },
+  completionText: { color: "#173c33", fontSize: 25, fontWeight: "900" },
 });
