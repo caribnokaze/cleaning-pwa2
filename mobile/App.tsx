@@ -274,7 +274,15 @@ export default function App() {
         setUploadPhase(`${categoryIndex + 1}/${job.categories.length} ${category?.label || item.id}：${missing.length}枚を準備・送信中…`);
         const signedResponse = await fetch(`${API_URL}/api/mobile/photos/presigned-urls`, {
           method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
-          body: JSON.stringify({ uploadId: item.runId, date: job.date, site: job.site, staff: job.staff, photoId: item.id, files: missing.map((index) => files[index]) }),
+          body: JSON.stringify({
+            uploadId: item.runId,
+            date: job.date,
+            site: job.site,
+            staff: job.staff,
+            photoId: item.id,
+            filterMinutes: item.id === "photos_filter" ? Number(job.workTime) : undefined,
+            files: missing.map((index) => files[index]),
+          }),
         });
         requireValidSession(signedResponse);
         const signedBody = await signedResponse.json();

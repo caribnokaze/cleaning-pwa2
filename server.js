@@ -16,9 +16,11 @@ const {
 } = require("@aws-sdk/client-secrets-manager");
 
 const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
+const { createMobileApiRouter } = require("./mobile-api");
 const app = express();
 const AUTH_COOKIE = "cleaning_auth";
 const AUTH_TTL_SECONDS = 12 * 60 * 60;
+const MOBILE_AUTH_TTL_SECONDS = 72 * 60 * 60;
 let APP_PASSWORD = process.env.APP_PASSWORD || "";
 let AUTH_SECRET = process.env.AUTH_SECRET || "";
 const LOGIN_ATTEMPTS_PREFIX = process.env.LOGIN_ATTEMPTS_PREFIX || "";
@@ -44,8 +46,8 @@ function safeEqual(left, right) {
   return crypto.timingSafeEqual(leftHash, rightHash);
 }
 
-function createAuthToken() {
-  const expiresAt = Math.floor(Date.now() / 1000) + AUTH_TTL_SECONDS;
+function createAuthToken(ttlSeconds = AUTH_TTL_SECONDS) {
+  const expiresAt = Math.floor(Date.now() / 1000) + ttlSeconds;
   const signature = crypto
     .createHmac("sha256", AUTH_SECRET)
     .update(String(expiresAt))
@@ -101,59 +103,63 @@ function authCookie(req, value, maxAge = AUTH_TTL_SECONDS) {
 
 const loginAttempts = new Map();
 const LOGIN_WINDOW_MS = 15 * 60 * 1000;
+const MOBILE_LOGIN_WINDOW_MS = 10 * 60 * 1000;
 const MAX_LOGIN_ATTEMPTS = 5;
 
-function loginAttemptPrefix(ip) {
+function loginAttemptPrefix(ip, namespace = "web") {
   const ipHash = crypto.createHash("sha256").update(ip).digest("hex");
-  return `${LOGIN_ATTEMPTS_PREFIX}/${ipHash}/`;
+  const namespacePath = namespace === "web" ? "" : `${namespace}/`;
+  return `${LOGIN_ATTEMPTS_PREFIX}/${namespacePath}${ipHash}/`;
 }
 
-async function listLoginAttempts(ip) {
-  const prefix = loginAttemptPrefix(ip);
-  const cutoff = Date.now() - LOGIN_WINDOW_MS;
+async function listLoginAttempts(ip, namespace = "web", windowMs = LOGIN_WINDOW_MS) {
+  const prefix = loginAttemptPrefix(ip, namespace);
+  const cutoff = Date.now() - windowMs;
   const objects = (await listAllObjects(prefix)).filter(
     (item) => item.Key && (item.LastModified?.getTime() || 0) >= cutoff,
   );
   return objects;
 }
 
-async function loginAttemptState(ip) {
+async function loginAttemptState(ip, namespace = "web", windowMs = LOGIN_WINDOW_MS) {
   if (LOGIN_ATTEMPTS_PREFIX) {
-    const objects = await listLoginAttempts(ip);
-    return { count: objects.length };
+    const objects = await listLoginAttempts(ip, namespace, windowMs);
+    const oldest = objects.reduce((value, item) => Math.min(value, item.LastModified?.getTime() || Date.now()), Date.now());
+    return { count: objects.length, resetAt: oldest + windowMs };
   }
 
   const now = Date.now();
-  const current = loginAttempts.get(ip);
+  const key = `${namespace}:${ip}`;
+  const current = loginAttempts.get(key);
   if (!current || current.resetAt <= now) {
-    const fresh = { count: 0, resetAt: now + LOGIN_WINDOW_MS };
-    loginAttempts.set(ip, fresh);
+    const fresh = { count: 0, resetAt: now + windowMs };
+    loginAttempts.set(key, fresh);
     return fresh;
   }
   return current;
 }
 
-async function recordFailedLogin(ip) {
+async function recordFailedLogin(ip, namespace = "web", windowMs = LOGIN_WINDOW_MS) {
   if (LOGIN_ATTEMPTS_PREFIX) {
     await s3Client.send(
       new PutObjectCommand({
         Bucket: BUCKET_NAME,
-        Key: `${loginAttemptPrefix(ip)}${Date.now()}-${crypto.randomUUID()}`,
+        Key: `${loginAttemptPrefix(ip, namespace)}${Date.now()}-${crypto.randomUUID()}`,
         Body: "",
         ContentType: "application/octet-stream",
       }),
     );
-    return (await listLoginAttempts(ip)).length;
+    return (await listLoginAttempts(ip, namespace, windowMs)).length;
   }
 
-  const state = await loginAttemptState(ip);
+  const state = await loginAttemptState(ip, namespace, windowMs);
   state.count += 1;
   return state.count;
 }
 
-async function clearLoginAttempts(ip) {
+async function clearLoginAttempts(ip, namespace = "web") {
   if (LOGIN_ATTEMPTS_PREFIX) {
-    const objects = await listAllObjects(loginAttemptPrefix(ip));
+    const objects = await listAllObjects(loginAttemptPrefix(ip, namespace));
     if (objects.length) {
       await s3Client.send(
         new DeleteObjectsCommand({
@@ -167,7 +173,7 @@ async function clearLoginAttempts(ip) {
     }
     return;
   }
-  loginAttempts.delete(ip);
+  loginAttempts.delete(`${namespace}:${ip}`);
 }
 
 app.get("/health", (req, res) => res.json({ status: "ok" }));
@@ -204,23 +210,27 @@ app.post("/login", async (req, res) => {
 
 app.post("/api/mobile/login", async (req, res) => {
   try {
-    const state = await loginAttemptState(req.ip);
+    const state = await loginAttemptState(req.ip, "mobile", MOBILE_LOGIN_WINDOW_MS);
     if (state.count >= MAX_LOGIN_ATTEMPTS) {
-      return res.status(429).json({ error: "ログイン試行回数が上限に達しました" });
+      const retryAfterSeconds = Math.max(1, Math.ceil((state.resetAt - Date.now()) / 1000));
+      res.set("Retry-After", String(retryAfterSeconds));
+      return res.status(429).json({ error: "ログイン試行回数が上限に達しました", retryAfterSeconds });
     }
 
     if (!safeEqual(String(req.body.password || ""), APP_PASSWORD)) {
-      const count = await recordFailedLogin(req.ip);
+      const count = await recordFailedLogin(req.ip, "mobile", MOBILE_LOGIN_WINDOW_MS);
+      if (count >= MAX_LOGIN_ATTEMPTS) res.set("Retry-After", String(MOBILE_LOGIN_WINDOW_MS / 1000));
       return res.status(count >= MAX_LOGIN_ATTEMPTS ? 429 : 401).json({
         error:
           count >= MAX_LOGIN_ATTEMPTS
             ? "ログイン試行回数が上限に達しました"
             : "パスワードが違います",
+        ...(count >= MAX_LOGIN_ATTEMPTS ? { retryAfterSeconds: MOBILE_LOGIN_WINDOW_MS / 1000 } : {}),
       });
     }
 
-    await clearLoginAttempts(req.ip);
-    const token = createAuthToken();
+    await clearLoginAttempts(req.ip, "mobile");
+    const token = createAuthToken(MOBILE_AUTH_TTL_SECONDS);
     const expiresAt = Number(token.split(".")[0]);
     res.set("Cache-Control", "no-store");
     res.json({ token, expiresAt });
@@ -283,6 +293,15 @@ async function listAllObjects(prefix = "") {
 
   return objects;
 }
+
+app.use(
+  "/api/mobile",
+  createMobileApiRouter({
+    express,
+    s3Client,
+    bucketName: BUCKET_NAME,
+  }),
+);
 
 function isSafePathSegment(value) {
   return (
