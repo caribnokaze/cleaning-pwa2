@@ -11,6 +11,7 @@ const {
   validateProductionAccount,
   validateProductionConfiguration,
 } = require("./production-deploy-safety");
+const { resolveDeploymentSecretArns } = require("./deployment-secrets");
 const { spawnSync } = require("child_process");
 const {
   STSClient,
@@ -92,12 +93,17 @@ if (!IS_MOBILE_STAGING) {
   });
 }
 
-if (!IS_PREFLIGHT && (!process.env.APP_PASSWORD || !process.env.AUTH_SECRET)) {
+if (
+  IS_MOBILE_STAGING &&
+  !IS_PREFLIGHT &&
+  (!process.env.APP_PASSWORD || !process.env.AUTH_SECRET)
+) {
   throw new Error(
     ".envにAPP_PASSWORDとAUTH_SECRETを設定してください。",
   );
 }
 if (
+  IS_MOBILE_STAGING &&
   !IS_PREFLIGHT &&
   (process.env.APP_PASSWORD.length < 8 || process.env.AUTH_SECRET.length < 32)
 ) {
@@ -587,10 +593,16 @@ async function main() {
   run("docker", ["tag", localImage, remoteImage]);
   run("docker", ["push", remoteImage]);
 
-  const [passwordSecretArn, authSecretArn] = await Promise.all([
-    putSecret(APP_PASSWORD_SECRET, process.env.APP_PASSWORD),
-    putSecret(AUTH_SECRET_NAME, process.env.AUTH_SECRET),
-  ]);
+  const [passwordSecretArn, authSecretArn] = await resolveDeploymentSecretArns({
+    allowUpdates: IS_MOBILE_STAGING,
+    passwordSecretName: APP_PASSWORD_SECRET,
+    authSecretName: AUTH_SECRET_NAME,
+    passwordValue: process.env.APP_PASSWORD,
+    authValue: process.env.AUTH_SECRET,
+    putSecret,
+    describeSecret: (name) =>
+      clients.secrets.send(new DescribeSecretCommand({ SecretId: name })),
+  });
   const { role, created } = await getOrCreateRole();
   await setRolePolicy(passwordSecretArn, authSecretArn);
   if (created) {

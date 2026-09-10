@@ -5,6 +5,7 @@ const {
   validateProductionAccount,
   validateProductionConfiguration,
 } = require("./production-deploy-safety");
+const { resolveDeploymentSecretArns } = require("./deployment-secrets");
 const { spawnSync } = require("child_process");
 const {
   STSClient,
@@ -25,8 +26,6 @@ const {
 } = require("@aws-sdk/client-iam");
 const {
   SecretsManagerClient,
-  CreateSecretCommand,
-  PutSecretValueCommand,
   DescribeSecretCommand,
 } = require("@aws-sdk/client-secrets-manager");
 const {
@@ -61,16 +60,6 @@ validateProductionConfiguration({
   approved: PRODUCTION_DEPLOY_APPROVED,
   preflight: IS_PREFLIGHT,
 });
-
-if (!IS_PREFLIGHT && (!process.env.APP_PASSWORD || !process.env.AUTH_SECRET)) {
-  throw new Error(".envにAPP_PASSWORDとAUTH_SECRETを設定してください。");
-}
-if (
-  !IS_PREFLIGHT &&
-  (process.env.APP_PASSWORD.length < 8 || process.env.AUTH_SECRET.length < 32)
-) {
-  throw new Error("APP_PASSWORDは8文字以上、AUTH_SECRETは32文字以上にしてください。");
-}
 
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 const clients = {
@@ -129,21 +118,6 @@ async function getOrCreateRole(name, servicePrincipal) {
       }),
     }));
     return result.Role;
-  }
-}
-
-async function putSecret(name, value) {
-  try {
-    const result = await clients.secrets.send(new DescribeSecretCommand({ SecretId: name }));
-    await clients.secrets.send(new PutSecretValueCommand({ SecretId: name, SecretString: value }));
-    return result.ARN;
-  } catch (error) {
-    if (error.name !== "ResourceNotFoundException") throw error;
-    const result = await clients.secrets.send(new CreateSecretCommand({
-      Name: name,
-      SecretString: value,
-    }));
-    return result.ARN;
   }
 }
 
@@ -230,8 +204,13 @@ async function main() {
   run("docker", ["tag", `${REPOSITORY_NAME}:latest`, `${repository.repositoryUri}:latest`]);
   run("docker", ["push", `${repository.repositoryUri}:latest`]);
 
-  const passwordSecretArn = await putSecret(APP_PASSWORD_SECRET, process.env.APP_PASSWORD);
-  const authSecretArn = await putSecret(AUTH_SECRET_NAME, process.env.AUTH_SECRET);
+  const [passwordSecretArn, authSecretArn] = await resolveDeploymentSecretArns({
+    allowUpdates: false,
+    passwordSecretName: APP_PASSWORD_SECRET,
+    authSecretName: AUTH_SECRET_NAME,
+    describeSecret: (name) =>
+      clients.secrets.send(new DescribeSecretCommand({ SecretId: name })),
+  });
   const ecrRole = await getOrCreateRole(ECR_ROLE_NAME, "build.apprunner.amazonaws.com");
   await clients.iam.send(new AttachRolePolicyCommand({
     RoleName: ECR_ROLE_NAME,

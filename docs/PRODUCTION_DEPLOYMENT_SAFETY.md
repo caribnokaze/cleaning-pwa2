@@ -42,3 +42,7 @@ DEPLOY_TARGET=production PRODUCTION_DEPLOY_APPROVED=true npm run deploy:aws
 AWSリソースを更新する前に停止します。LambdaとApp Runnerを同時にデプロイしては
 いけません。現在 `tocoro-report.com` が接続している配信方式を確認して選択します。
 これら2つの安全確認値は `.env` に保存せず、実行するコマンドにだけ指定します。
+
+本番デプロイでは、Secrets Managerに保存済みの共有パスワードと認証秘密値のARNだけを
+参照します。秘密値の取得、作成、更新は行わないため、既存Web利用者の認証状態を
+デプロイによって変更しません。検証環境だけは分離済みの検証用秘密値を更新できます。
