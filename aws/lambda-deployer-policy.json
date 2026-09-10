@@ -69,11 +69,7 @@
     {
       "Sid": "ManageProductionSecrets",
       "Effect": "Allow",
-      "Action": [
-        "secretsmanager:CreateSecret",
-        "secretsmanager:DescribeSecret",
-        "secretsmanager:PutSecretValue"
-      ],
+      "Action": "secretsmanager:DescribeSecret",
       "Resource": "arn:aws:secretsmanager:ap-northeast-1:881224647732:secret:tocoro-cleaning/*"
     },
     {
