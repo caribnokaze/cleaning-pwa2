@@ -1,8 +1,11 @@
 import { StatusBar } from "expo-status-bar";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import DateTimePicker, { DateTimePickerEvent } from "@react-native-community/datetimepicker";
+import { Picker } from "@react-native-picker/picker";
 import * as SecureStore from "expo-secure-store";
 import { useEffect, useMemo, useState } from "react";
-import { Platform, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Modal, Platform, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { toHiragana, toRomaji } from "wanakana";
 import FastPhotoPicker, { PhotoPickerResult } from "./modules/fast-photo-picker/src";
 
 type WorkType = "normal" | "full" | "regular" | "filter";
@@ -12,8 +15,48 @@ type UploadCategory = { id: string; runId: string; assetIds: string[] };
 type UploadJob = { version: 1; date: string; site: string; staff: string; workType: WorkType; workTime: string; categories: UploadCategory[]; createdAt: string };
 type UploadSummary = { requested: number; uploaded: number; bytes: number; preparationMs: number; uploadMs: number; automaticRetries: number; deleted?: number };
 type AuthSession = { version: 1; token: string; expiresAt: number };
-type SelectOption = { value: string; label: string };
+type SelectOption = { value: string; label: string; aliases?: string[] };
 type ReportOptions = { staff: SelectOption[]; sites: string[] };
+
+const SITE_SEARCH_ALIASES: Record<string, string[]> = {
+  "天庵": ["あまあん"],
+  "岩切邸": ["いわきりてい"],
+  "金魚": ["きんぎょ"],
+  "空間": ["くうま"],
+  "湖凪": ["こなぎ"],
+  "心": ["こころ"],
+  "燦々": ["さんさん"],
+  "四季禅": ["しきぜん"],
+  "雫": ["しずく"],
+  "響": ["ひびき"],
+  "富美": ["ふみ"],
+  "富士禅": ["ふじぜん"],
+  "木座": ["もくざ"],
+};
+const STAFF_SURNAME_SEARCH_ALIASES: Record<string, string[]> = {
+  "今泉": ["いまいずみ"], "天野": ["あまの"], "坂本": ["さかもと"], "山村": ["やまむら"],
+  "渡辺": ["わたなべ"], "渡邊": ["わたなべ"], "渡邉": ["わたなべ"], "猪俣": ["いのまた"],
+  "宮崎": ["みやざき"], "荒井": ["あらい"], "奥脇": ["おくわき"], "吉沢": ["よしざわ"],
+  "希代": ["きたい", "きだい"], "稀代": ["きたい", "きだい"], "高根": ["たかね"], "樫村": ["かしむら"],
+  "羽田": ["はねだ", "はだ"], "小林": ["こばやし"], "松本": ["まつもと"], "鈴木": ["すずき"],
+  "萱沼": ["かやぬま"], "吉村": ["よしむら"], "桑原": ["くわばら", "くわはら"], "宮本": ["みやもと"],
+  "菅谷": ["すがや", "すがたに"], "大森": ["おおもり"], "髙村": ["たかむら"], "廣瀬": ["ひろせ"],
+  "鎌田": ["かまた"], "市村": ["いちむら"], "志村": ["しむら"], "栗林": ["くりばやし"],
+  "山田": ["やまだ"], "土橋": ["どばし", "つちはし"], "宮下": ["みやした"], "倉沢": ["くらさわ"],
+  "中澤": ["なかざわ"], "平井": ["ひらい"], "齊藤": ["さいとう"], "池谷": ["いけたに", "いけや"],
+  "堀内": ["ほりうち"], "内田": ["うちだ"], "鷲谷": ["わしや", "わしたに"], "佐久間": ["さくま"],
+  "杉本": ["すぎもと"], "大友": ["おおとも"], "小野": ["おの"], "中塚": ["なかつか", "なかづか"],
+  "北川": ["きたがわ"], "杉田": ["すぎた"], "安斉": ["あんざい", "あんさい"], "長田": ["おさだ", "ながた"],
+  "小俣": ["おまた"], "小佐野": ["こさの"], "長澤": ["ながさわ"], "宇治": ["うじ"],
+  "加藤": ["かとう"], "圓谷": ["つぶらや", "つむらや", "えんや"], "井上": ["いのうえ"], "北畑": ["きたはた"],
+  "ロサン": ["ろさん"], "大西": ["おおにし"], "清水": ["しみず"], "柴崎": ["しばさき"],
+};
+
+const addStaffSurnameAliases = (option: SelectOption): SelectOption => {
+  const entry = Object.entries(STAFF_SURNAME_SEARCH_ALIASES)
+    .find(([surname]) => option.label.replace(/^\d+\s*/, "").startsWith(surname));
+  return entry ? { ...option, aliases: [...(option.aliases ?? []), ...entry[1]] } : option;
+};
 
 const APP_ENV = process.env.EXPO_PUBLIC_APP_ENV || "";
 const API_URL = (process.env.EXPO_PUBLIC_MOBILE_API_URL || "").replace(/\/$/, "");
@@ -66,6 +109,14 @@ const localDateString = () => {
   const now = new Date();
   return new Date(now.getTime() - now.getTimezoneOffset() * 60_000).toISOString().slice(0, 10);
 };
+const dateFromLocalString = (value: string) => {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return new Date();
+  const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  return Number.isNaN(date.getTime()) ? new Date() : date;
+};
+const localStringFromDate = (date: Date) =>
+  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 const includesRegular = (type: WorkType) => type === "regular" || type === "full";
 const includesFilter = (type: WorkType) => type === "filter" || type === "full";
 const isUploadJob = (value: unknown): value is UploadJob => {
@@ -96,6 +147,7 @@ const isReportOptions = (value: unknown): value is ReportOptions => {
 export default function App() {
   const [screen, setScreen] = useState<Screen>("login");
   const [cleaningDate, setCleaningDate] = useState(localDateString);
+  const [datePickerVisible, setDatePickerVisible] = useState(false);
   const [staffName, setStaffName] = useState("");
   const [siteName, setSiteName] = useState("");
   const [workType, setWorkType] = useState<WorkType>("normal");
@@ -434,9 +486,35 @@ export default function App() {
         {screen === "details" && <>
           <Text style={styles.title}>報告情報を入力</Text>
           <Text style={styles.description}>現在のWeb版と同じ情報を入力します。</Text>
-          <Field label="清掃日"><TextInput style={styles.input} value={cleaningDate} onChangeText={setCleaningDate} placeholder="YYYY-MM-DD" autoCapitalize="none" /></Field>
-          <Field label="担当者"><SearchableSelect value={staffName} options={reportOptions?.staff ?? []} onSelect={setStaffName} placeholder="番号または氏名を入力して検索" loading={optionsLoading} /></Field>
-          <Field label="現場"><SearchableSelect value={siteName} options={(reportOptions?.sites ?? []).map((site) => ({ value: site, label: site }))} onSelect={setSiteName} placeholder="現場名を入力して検索" loading={optionsLoading} /></Field>
+          <Field label="清掃日">
+            <Pressable
+              style={styles.dateInput}
+              onPress={() => setDatePickerVisible(true)}
+              accessibilityRole="button"
+              accessibilityLabel={`清掃日 ${cleaningDate}`}
+              accessibilityHint="日付選択を開きます"
+            >
+              <Text style={styles.dateInputText}>{cleaningDate}</Text>
+              <Text style={styles.dateInputIcon}>📅</Text>
+            </Pressable>
+            {datePickerVisible && <View style={Platform.OS === "ios" ? styles.iosDatePicker : undefined}>
+              <DateTimePicker
+                value={dateFromLocalString(cleaningDate)}
+                mode="date"
+                display={Platform.OS === "ios" ? "spinner" : "default"}
+                locale="ja-JP"
+                onChange={(event: DateTimePickerEvent, date?: Date) => {
+                  if (Platform.OS === "android") setDatePickerVisible(false);
+                  if (event.type === "set" && date) setCleaningDate(localStringFromDate(date));
+                }}
+              />
+              {Platform.OS === "ios" && <Pressable style={styles.datePickerClose} onPress={() => setDatePickerVisible(false)}>
+                <Text style={styles.datePickerCloseText}>閉じる</Text>
+              </Pressable>}
+            </View>}
+          </Field>
+          <Field label="担当者"><SearchableSelect value={staffName} options={(reportOptions?.staff ?? []).map(addStaffSurnameAliases)} onSelect={setStaffName} placeholder="番号・氏名・読み仮名で検索" selectionLabel="担当者" loading={optionsLoading} /></Field>
+          <Field label="現場"><SearchableSelect value={siteName} options={(reportOptions?.sites ?? []).map((site) => ({ value: site, label: site, aliases: SITE_SEARCH_ALIASES[site] }))} onSelect={setSiteName} placeholder="現場名を入力して検索" selectionLabel="物件名" loading={optionsLoading} /></Field>
           {!reportOptions && !optionsLoading && <SecondaryButton label="選択肢を再読み込み" onPress={() => setOptionsReload((value) => value + 1)} />}
           <Text style={styles.sectionLabel}>作業区分 <Text style={styles.required}>必須</Text></Text>
           {WORK_TYPES.map((item) => {
@@ -507,37 +585,94 @@ export default function App() {
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return <View style={styles.field}><Text style={styles.sectionLabel}>{label} <Text style={styles.required}>必須</Text></Text>{children}</View>;
 }
+const SEARCH_CHARACTER_EQUIVALENTS: Record<string, string> = {
+  "邊": "辺", "邉": "辺",
+  "斉": "斎", "齋": "斎", "齊": "斎",
+  "髙": "高", "﨑": "崎", "嶋": "島",
+  "澤": "沢", "濱": "浜", "廣": "広",
+  "國": "国", "櫻": "桜", "德": "徳",
+  "瀨": "瀬", "眞": "真", "惠": "恵",
+  "榮": "栄", "禮": "礼", "萬": "万",
+  "壽": "寿", "冨": "富", "𠮷": "吉",
+};
 function normalizeSearch(value: string) {
-  return value.normalize("NFKC").toLocaleLowerCase("ja").replace(/\s+/g, "");
+  return value
+    .normalize("NFKC")
+    .toLocaleLowerCase("ja")
+    .replace(/[邊邉斉齋齊髙﨑嶋澤濱廣國櫻德瀨眞惠榮禮萬壽冨𠮷]/gu, (character) => SEARCH_CHARACTER_EQUIVALENTS[character] ?? character)
+    .replace(/[\s・._-]+/g, "");
 }
-function SearchableSelect({ value, options, onSelect, placeholder, loading }: { value: string; options: SelectOption[]; onSelect: (value: string) => void; placeholder: string; loading: boolean }) {
+function searchForms(value: string) {
+  const forms = [value, toHiragana(value), toRomaji(value)]
+    .map(normalizeSearch)
+    .filter(Boolean);
+  return [...new Set(forms)];
+}
+function matchesSearch(candidate: string, query: string) {
+  const queryForms = searchForms(query);
+  const candidateForms = searchForms(candidate);
+  return queryForms.some((queryForm) => candidateForms.some((candidateForm) => candidateForm.includes(queryForm)));
+}
+function SearchableSelect({ value, options, onSelect, placeholder, selectionLabel, loading }: { value: string; options: SelectOption[]; onSelect: (value: string) => void; placeholder: string; selectionLabel: string; loading: boolean }) {
   const selected = options.find((item) => item.value === value);
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
+  const [pickerVisible, setPickerVisible] = useState(false);
+  const [pickerValue, setPickerValue] = useState("");
   useEffect(() => {
     if (value) setQuery(selected?.label ?? value);
   }, [value, selected?.label]);
   const normalized = normalizeSearch(query);
-  const matches = options.filter((item) => !normalized || [item.label, item.value].some((candidate) => normalizeSearch(candidate).includes(normalized)));
-  const visible = matches.slice(0, 30);
+  const matches = options.filter((item) => !normalized || [item.label, item.value, ...(item.aliases ?? [])].some((candidate) => matchesSearch(candidate, query)));
+  const visible = normalized ? matches : [];
   return <View>
-    <TextInput
-      style={styles.input}
-      value={query}
-      onFocus={() => setOpen(true)}
-      onChangeText={(text) => { setQuery(text); onSelect(""); setOpen(true); }}
-      placeholder={loading ? "選択肢を読み込み中…" : placeholder}
-      editable={!loading}
-      autoCorrect={false}
-      accessibilityRole="search"
-    />
+    <View style={styles.selectInputRow}>
+      <TextInput
+        style={[styles.input, styles.selectSearchInput]}
+        value={query}
+        onFocus={() => setOpen(false)}
+        onChangeText={(text) => { setQuery(text); onSelect(""); setOpen(!!normalizeSearch(text)); }}
+        placeholder={loading ? "選択肢を読み込み中…" : placeholder}
+        editable={!loading}
+        autoCorrect={false}
+        accessibilityRole="search"
+      />
+      <Pressable
+        style={[styles.selectPickerButton, (loading || !options.length) && styles.buttonDisabled]}
+        onPress={() => {
+          setPickerValue(value || options[0]?.value || "");
+          setOpen(false);
+          setPickerVisible(true);
+        }}
+        disabled={loading || !options.length}
+        accessibilityRole="button"
+        accessibilityLabel={`${selectionLabel}を一覧から選択`}
+      ><Text style={styles.selectPickerButtonText}>⌄</Text></Pressable>
+    </View>
     {open && !loading && <View style={styles.selectOptions}>
       {visible.map((item) => <Pressable key={item.value} style={[styles.selectOption, item.value === value && styles.selectOptionSelected]} onPress={() => { onSelect(item.value); setQuery(item.label); setOpen(false); }} accessibilityRole="button">
         <Text style={[styles.selectOptionText, item.value === value && styles.selectOptionTextSelected]}>{item.label}</Text>
       </Pressable>)}
       {!visible.length && <Text style={styles.selectEmpty}>一致する選択肢がありません</Text>}
-      {matches.length > visible.length && <Text style={styles.selectHint}>候補が多いため、文字を追加して絞り込んでください</Text>}
     </View>}
+    <Modal visible={pickerVisible} transparent animationType="slide" onRequestClose={() => setPickerVisible(false)}>
+      <View style={styles.pickerOverlay}>
+        <View style={styles.pickerSheet}>
+          <Text style={styles.pickerTitle}>{selectionLabel}を選択</Text>
+          <Picker selectedValue={pickerValue} onValueChange={(nextValue) => setPickerValue(String(nextValue))} mode={Platform.OS === "android" ? "dropdown" : undefined}>
+            {options.map((item) => <Picker.Item key={item.value} label={item.label} value={item.value} />)}
+          </Picker>
+          <View style={styles.pickerActions}>
+            <Pressable style={styles.pickerCancelButton} onPress={() => setPickerVisible(false)}><Text style={styles.pickerCancelText}>キャンセル</Text></Pressable>
+            <Pressable style={styles.pickerConfirmButton} onPress={() => {
+              const item = options.find((option) => option.value === pickerValue);
+              if (item) { onSelect(item.value); setQuery(item.label); }
+              setPickerVisible(false);
+            }}><Text style={styles.pickerConfirmText}>選択</Text></Pressable>
+          </View>
+        </View>
+      </View>
+    </Modal>
   </View>;
 }
 function PrimaryButton({ label, onPress, disabled, compact }: { label: string; onPress: () => void; disabled?: boolean; compact?: boolean }) {
@@ -566,13 +701,30 @@ const styles = StyleSheet.create({
   container: { padding: 20, paddingBottom: 48 }, title: { fontSize: 24, fontWeight: "900", color: "#173c33", marginTop: 4 }, description: { fontSize: 14, lineHeight: 21, color: "#60706c", marginTop: 8, marginBottom: 20 },
   field: { marginBottom: 17 }, sectionLabel: { color: "#294b42", fontSize: 15, fontWeight: "800", marginBottom: 8 }, required: { color: "#b42318", fontSize: 11 },
   input: { borderWidth: 1, borderColor: "#aebcb7", borderRadius: 10, paddingHorizontal: 14, paddingVertical: 13, fontSize: 16, backgroundColor: "#fff" },
+  selectInputRow: { flexDirection: "row", alignItems: "stretch", gap: 7 },
+  selectSearchInput: { flex: 1 },
+  selectPickerButton: { width: 50, borderWidth: 1, borderColor: "#aebcb7", borderRadius: 10, backgroundColor: "#fff", alignItems: "center", justifyContent: "center" },
+  selectPickerButtonText: { color: "#16745e", fontSize: 25, fontWeight: "800", marginTop: -5 },
+  pickerOverlay: { flex: 1, justifyContent: "flex-end", backgroundColor: "rgba(0,0,0,0.35)" },
+  pickerSheet: { backgroundColor: "#fff", borderTopLeftRadius: 18, borderTopRightRadius: 18, paddingTop: 18, paddingHorizontal: 18, paddingBottom: 28 },
+  pickerTitle: { color: "#173c33", fontSize: 18, fontWeight: "900", textAlign: "center", marginBottom: 4 },
+  pickerActions: { flexDirection: "row", gap: 10, marginTop: 8 },
+  pickerCancelButton: { flex: 1, minHeight: 48, borderWidth: 1, borderColor: "#16745e", borderRadius: 10, alignItems: "center", justifyContent: "center" },
+  pickerCancelText: { color: "#16745e", fontSize: 15, fontWeight: "800" },
+  pickerConfirmButton: { flex: 1, minHeight: 48, borderRadius: 10, backgroundColor: "#16745e", alignItems: "center", justifyContent: "center" },
+  pickerConfirmText: { color: "#fff", fontSize: 15, fontWeight: "800" },
+  dateInput: { minHeight: 50, borderWidth: 1, borderColor: "#aebcb7", borderRadius: 10, paddingHorizontal: 14, paddingVertical: 13, backgroundColor: "#fff", flexDirection: "row", alignItems: "center" },
+  dateInputText: { flex: 1, color: "#1f312c", fontSize: 16 },
+  dateInputIcon: { fontSize: 18 },
+  iosDatePicker: { marginTop: 8, borderWidth: 1, borderColor: "#d6dfdc", borderRadius: 10, backgroundColor: "#fff", overflow: "hidden" },
+  datePickerClose: { alignSelf: "flex-end", paddingHorizontal: 18, paddingVertical: 12 },
+  datePickerCloseText: { color: "#16745e", fontSize: 15, fontWeight: "800" },
   selectOptions: { marginTop: 5, borderWidth: 1, borderColor: "#c8d2ce", borderRadius: 10, overflow: "hidden", backgroundColor: "#fff" },
   selectOption: { minHeight: 45, justifyContent: "center", paddingHorizontal: 14, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: "#e7ecea" },
   selectOptionSelected: { backgroundColor: "#eaf5f1" },
   selectOptionText: { color: "#344640", fontSize: 15 },
   selectOptionTextSelected: { color: "#12634f", fontWeight: "800" },
   selectEmpty: { padding: 14, color: "#6a7974", fontSize: 14 },
-  selectHint: { paddingHorizontal: 14, paddingVertical: 10, color: "#60706c", backgroundColor: "#f5f7f6", fontSize: 12 },
   choice: { flexDirection: "row", alignItems: "center", padding: 14, borderRadius: 10, borderWidth: 1, borderColor: "#c8d2ce", backgroundColor: "#fff", marginBottom: 9 }, choiceSelected: { borderColor: "#16745e", backgroundColor: "#eaf5f1" },
   radio: { width: 19, height: 19, borderRadius: 10, borderWidth: 2, borderColor: "#8b9994", marginRight: 11 }, radioSelected: { borderWidth: 6, borderColor: "#16745e", backgroundColor: "#fff" }, choiceText: { fontSize: 15, color: "#344640" }, choiceTextSelected: { color: "#12634f", fontWeight: "800" },
   primaryButton: { marginTop: 14, minHeight: 52, borderRadius: 12, backgroundColor: "#16745e", alignItems: "center", justifyContent: "center", paddingHorizontal: 18 }, compactButton: { flex: 1, marginTop: 0 }, primaryButtonText: { color: "#fff", fontSize: 16, fontWeight: "800" }, buttonDisabled: { opacity: 0.35 },
