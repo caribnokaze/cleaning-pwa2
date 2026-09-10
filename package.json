@@ -22,6 +22,8 @@
     "start": "node server.js",
     "test": "node --test test/*.test.js",
     "deploy:aws": "node scripts/deploy-aws.js",
-    "deploy:lambda": "node scripts/deploy-lambda.js"
+    "deploy:lambda": "node scripts/deploy-lambda.js",
+    "preflight:aws": "DEPLOY_TARGET=production node scripts/deploy-aws.js --preflight",
+    "preflight:lambda": "DEPLOY_TARGET=production node scripts/deploy-lambda.js --preflight"
   }
 }

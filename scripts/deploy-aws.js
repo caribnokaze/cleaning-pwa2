@@ -1,4 +1,10 @@
+const DEPLOY_TARGET = process.env.DEPLOY_TARGET || "";
+const PRODUCTION_DEPLOY_APPROVED = process.env.PRODUCTION_DEPLOY_APPROVED || "";
 require("dotenv").config();
+const {
+  validateProductionAccount,
+  validateProductionConfiguration,
+} = require("./production-deploy-safety");
 const { spawnSync } = require("child_process");
 const {
   STSClient,
@@ -32,6 +38,7 @@ const {
 } = require("@aws-sdk/client-apprunner");
 const {
   S3Client,
+  HeadBucketCommand,
   GetBucketCorsCommand,
   PutBucketCorsCommand,
 } = require("@aws-sdk/client-s3");
@@ -45,9 +52,24 @@ const ECR_ROLE_NAME = "TocoroCleaningAppRunnerEcrRole";
 const INSTANCE_ROLE_NAME = "TocoroCleaningAppRunnerInstanceRole";
 const APP_PASSWORD_SECRET = "tocoro-cleaning/app-password";
 const AUTH_SECRET_NAME = "tocoro-cleaning/auth-secret";
+const IS_PREFLIGHT = process.argv.includes("--preflight");
 
-if (!process.env.APP_PASSWORD || !process.env.AUTH_SECRET) {
+validateProductionConfiguration({
+  deployTarget: DEPLOY_TARGET,
+  region: REGION,
+  bucket: BUCKET,
+  approved: PRODUCTION_DEPLOY_APPROVED,
+  preflight: IS_PREFLIGHT,
+});
+
+if (!IS_PREFLIGHT && (!process.env.APP_PASSWORD || !process.env.AUTH_SECRET)) {
   throw new Error(".envにAPP_PASSWORDとAUTH_SECRETを設定してください。");
+}
+if (
+  !IS_PREFLIGHT &&
+  (process.env.APP_PASSWORD.length < 8 || process.env.AUTH_SECRET.length < 32)
+) {
+  throw new Error("APP_PASSWORDは8文字以上、AUTH_SECRETは32文字以上にしてください。");
 }
 
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -169,6 +191,31 @@ async function updateBucketCors(origin) {
 async function main() {
   const identity = await clients.sts.send(new GetCallerIdentityCommand({}));
   console.log(`AWS account: ${identity.Account} / region: ${REGION}`);
+  validateProductionAccount(identity.Account);
+
+  if (IS_PREFLIGHT) {
+    await clients.s3.send(new HeadBucketCommand({ Bucket: BUCKET }));
+    const repositories = await clients.ecr.send(
+      new DescribeRepositoriesCommand({ repositoryNames: [REPOSITORY_NAME] }),
+    );
+    const services = await clients.appRunner.send(
+      new ListServicesCommand({ MaxResults: 20 }),
+    );
+    const service = (services.ServiceSummaryList || []).find(
+      (item) => item.ServiceName === SERVICE_NAME,
+    );
+    if (!repositories.repositories?.[0] || !service) {
+      throw new Error("本番App Runnerの既存リソースを確認できませんでした。");
+    }
+    await Promise.all([
+      clients.iam.send(new GetRoleCommand({ RoleName: ECR_ROLE_NAME })),
+      clients.iam.send(new GetRoleCommand({ RoleName: INSTANCE_ROLE_NAME })),
+      clients.secrets.send(new DescribeSecretCommand({ SecretId: APP_PASSWORD_SECRET })),
+      clients.secrets.send(new DescribeSecretCommand({ SecretId: AUTH_SECRET_NAME })),
+    ]);
+    console.log("Preflight OK: 本番App Runner構成を読み取り確認しました。変更はありません。");
+    return;
+  }
 
   const repository = await getOrCreateRepository();
   const auth = await clients.ecr.send(new GetAuthorizationTokenCommand({}));
