@@ -8,6 +8,7 @@ public final class FastPhotoPickerModule: Module {
 
   public func definition() -> ModuleDefinition {
     Name("FastPhotoPicker")
+    Events("onUploadProgress")
 
     AsyncFunction("pickPhotos") { (limit: Int, categoryName: String, promise: Promise) in
       DispatchQueue.main.async {
@@ -280,7 +281,12 @@ public final class FastPhotoPickerModule: Module {
                 resultLock.lock()
                 uploadedCount += 1
                 uploadedBytes += file.size
+                let completedCount = uploadedCount
                 resultLock.unlock()
+                self.sendEvent("onUploadProgress", [
+                  "completedCount": completedCount,
+                  "totalCount": count,
+                ])
                 uploadGroup.leave()
                 return
               }

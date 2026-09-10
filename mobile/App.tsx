@@ -6,7 +6,7 @@ import * as SecureStore from "expo-secure-store";
 import { useEffect, useMemo, useState } from "react";
 import { Modal, Platform, Pressable, SafeAreaView, ScrollView, StatusBar as NativeStatusBar, StyleSheet, Text, TextInput, View } from "react-native";
 import { toHiragana, toRomaji } from "wanakana";
-import FastPhotoPicker, { PhotoPickerResult } from "./modules/fast-photo-picker/src";
+import FastPhotoPicker, { PhotoPickerResult, PhotoUploadResult } from "./modules/fast-photo-picker/src";
 
 type WorkType = "normal" | "full" | "regular" | "filter";
 type Screen = "login" | "details" | "photos" | "review";
@@ -14,6 +14,7 @@ type Category = { id: string; label: string; hint?: string; group: "normal" | "r
 type UploadCategory = { id: string; runId: string; assetIds: string[] };
 type UploadJob = { version: 1; date: string; site: string; staff: string; workType: WorkType; workTime: string; categories: UploadCategory[]; createdAt: string };
 type UploadSummary = { requested: number; uploaded: number; bytes: number; preparationMs: number; uploadMs: number; automaticRetries: number; deleted?: number };
+type UploadProgress = { completed: number; total: number };
 type AuthSession = { version: 1; token: string; expiresAt: number };
 type SelectOption = { value: string; label: string; aliases?: string[] };
 type ReportOptions = { staff: SelectOption[]; sites: string[] };
@@ -166,6 +167,7 @@ export default function App() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [uploadPhase, setUploadPhase] = useState("");
   const [uploadSummary, setUploadSummary] = useState<UploadSummary | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<UploadProgress | null>(null);
   const [reportOptions, setReportOptions] = useState<ReportOptions | null>(null);
   const [optionsLoading, setOptionsLoading] = useState(false);
   const [optionsReload, setOptionsReload] = useState(0);
@@ -352,7 +354,9 @@ export default function App() {
   const runUpload = async (job: UploadJob, token: string) => {
     if (BUILD_CONFIGURATION_ERROR) throw new Error(BUILD_CONFIGURATION_ERROR);
     if (!FastPhotoPicker) throw new Error("写真送信機能を利用できません。");
+    const requested = job.categories.reduce((sum, entry) => sum + entry.assetIds.length, 0);
     let uploaded = 0, bytes = 0, preparationMs = 0, uploadMs = 0, automaticRetries = 0;
+    setUploadProgress({ completed: 0, total: requested });
     for (let categoryIndex = 0; categoryIndex < job.categories.length; categoryIndex += 1) {
       const item = job.categories[categoryIndex];
       const category = CATEGORIES.find((candidate) => candidate.id === item.id);
@@ -368,6 +372,8 @@ export default function App() {
       if (!beforeResponse.ok) throw new Error(beforeBody.error || "保存済み写真を確認できませんでした");
       const stored = new Set<string>(beforeBody.confirmed || []);
       const missing = files.map((file, index) => stored.has(file.clientPhotoId) ? -1 : index).filter((index) => index >= 0);
+      const alreadyUploadedInCategory = files.length - missing.length;
+      setUploadProgress({ completed: uploaded + alreadyUploadedInCategory, total: requested });
       if (missing.length) {
         setUploadPhase(`${categoryIndex + 1}/${job.categories.length} ${category?.label || item.id}：${missing.length}枚を準備・送信中…`);
         const signedResponse = await fetch(`${API_URL}/api/mobile/photos/presigned-urls`, {
@@ -388,9 +394,20 @@ export default function App() {
         const targetById = new Map<string, string>(signedBody.files.map((target: { clientPhotoId: string; uploadUrl: string }) => [target.clientPhotoId, target.uploadUrl]));
         const uploadUrls = missing.map((index) => targetById.get(files[index].clientPhotoId) || "");
         if (uploadUrls.some((uploadUrl) => !uploadUrl)) throw new Error("写真と送信URLを対応付けできませんでした");
-        const nativeResult = await FastPhotoPicker.prepareAndUploadPhotos(
-          missing.map((index) => item.assetIds[index]), uploadUrls, 720, 0.45, "none",
-        );
+        const progressSubscription = FastPhotoPicker.addListener("onUploadProgress", ({ completedCount }) => {
+          setUploadProgress({
+            completed: uploaded + alreadyUploadedInCategory + completedCount,
+            total: requested,
+          });
+        });
+        let nativeResult: PhotoUploadResult;
+        try {
+          nativeResult = await FastPhotoPicker.prepareAndUploadPhotos(
+            missing.map((index) => item.assetIds[index]), uploadUrls, 720, 0.45, "none",
+          );
+        } finally {
+          progressSubscription.remove();
+        }
         preparationMs += nativeResult.preparationMs; uploadMs += nativeResult.uploadMs;
         automaticRetries += nativeResult.automaticRetryCount;
       }
@@ -410,7 +427,8 @@ export default function App() {
         throw new Error(`${category?.label || item.id}：${item.assetIds.length - (verified.confirmed?.length || 0)}枚が未送信です`);
       }
       uploaded += verified.confirmed.length; bytes += verified.totalBytes || 0;
-      setUploadSummary({ requested: job.categories.reduce((sum, entry) => sum + entry.assetIds.length, 0), uploaded, bytes, preparationMs, uploadMs, automaticRetries });
+      setUploadProgress({ completed: uploaded, total: requested });
+      setUploadSummary({ requested, uploaded, bytes, preparationMs, uploadMs, automaticRetries });
     }
     if (IS_STAGING_BUILD) {
       setUploadPhase("全カテゴリーの検証S3保存を確認しました。確認後に削除してください。");
@@ -427,7 +445,7 @@ export default function App() {
       id: category.id, runId: `${Platform.OS}-${stamp}-${category.id}`.slice(0, 64), assetIds: selections[category.id].assetIds,
     }));
     const job: UploadJob = { version: 1, date: cleaningDate.trim(), site: siteName.trim(), staff: staffName.trim(), workType, workTime, categories, createdAt: new Date().toISOString() };
-    setError(""); setUploadSummary(null); setIsUploading(true); setUploadJob(job);
+    setError(""); setUploadSummary(null); setUploadProgress(null); setIsUploading(true); setUploadJob(job);
     try { await AsyncStorage.setItem(UPLOAD_JOB_KEY, JSON.stringify(job)); await runUpload(job, authToken); }
     catch (uploadError) { setError(uploadError instanceof Error ? uploadError.message : String(uploadError)); setUploadPhase("送信を中断しました。未完了分だけ再開できます。"); }
     finally { setIsUploading(false); }
@@ -435,7 +453,7 @@ export default function App() {
 
   const resumeUpload = async () => {
     if (!uploadJob || !authToken || isUploading) return;
-    setError(""); setIsUploading(true);
+    setError(""); setUploadProgress(null); setIsUploading(true);
     try { await runUpload(uploadJob, authToken); }
     catch (uploadError) { setError(uploadError instanceof Error ? uploadError.message : String(uploadError)); setUploadPhase("再開を中断しました。もう一度再開できます。"); }
     finally { setIsUploading(false); }
@@ -559,6 +577,10 @@ export default function App() {
           <View style={styles.reviewCard}><Text style={styles.groupTitle}>カテゴリー別枚数</Text>{visibleCategories.map((category) => <ReviewLine key={category.id} label={category.label} value={`${selections[category.id]?.assetIds.length ?? 0}枚`} />)}<View style={styles.totalDivider} /><ReviewLine label="合計" value={`${totalPhotos}枚`} strong /></View>
           {IS_STAGING_BUILD && <View style={styles.notice}><Text style={styles.noticeTitle}>検証専用S3への送信です</Text><Text style={styles.noticeText}>本番には送信しません。確認後は、この画面からテスト写真を削除してください。</Text></View>}
           {!!uploadPhase && <Text style={styles.phase}>{uploadPhase}</Text>}
+          {uploadProgress && <View style={styles.progressCard} accessibilityRole="progressbar" accessibilityValue={{ min: 0, max: uploadProgress.total, now: uploadProgress.completed }}>
+            <View style={styles.progressHeader}><Text style={styles.progressLabel}>{uploadProgress.completed >= uploadProgress.total ? "送信完了" : "写真を送信中"}</Text><Text style={styles.progressCount}>{uploadProgress.completed}/{uploadProgress.total}枚</Text></View>
+            <View style={styles.progressTrack}><View style={[styles.progressFill, { width: `${uploadProgress.total > 0 ? Math.min(100, Math.round((uploadProgress.completed / uploadProgress.total) * 100)) : 0}%` }]} /></View>
+          </View>}
           {uploadSummary && <View style={styles.uploadResult}>
             <Text style={styles.groupTitle}>{IS_STAGING_BUILD ? "検証S3送信結果" : "送信結果"}</Text>
             <ReviewLine label="成功" value={`${uploadSummary.uploaded}/${uploadSummary.requested}枚`} />
@@ -741,6 +763,12 @@ const styles = StyleSheet.create({
   passwordHelp: { marginTop: 8, flexDirection: "row", justifyContent: "flex-end" },
   passwordToggle: { color: "#16745e", fontSize: 14, fontWeight: "800", paddingVertical: 4, paddingHorizontal: 6 },
   phase: { marginTop: 13, color: "#36564e", fontSize: 14, lineHeight: 20, textAlign: "center" },
+  progressCard: { marginTop: 12, padding: 14, borderRadius: 10, backgroundColor: "#eaf5f1", borderWidth: 1, borderColor: "#bcd8cf" },
+  progressHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 9 },
+  progressLabel: { color: "#173c33", fontSize: 14, fontWeight: "800" },
+  progressCount: { color: "#12634f", fontSize: 14, fontWeight: "900" },
+  progressTrack: { height: 10, borderRadius: 5, overflow: "hidden", backgroundColor: "#cbd9d4" },
+  progressFill: { height: "100%", borderRadius: 5, backgroundColor: "#16745e" },
   uploadResult: { marginTop: 16, padding: 16, borderRadius: 12, backgroundColor: "#fff", borderWidth: 1, borderColor: "#bcd8cf" },
   deleteButton: { marginTop: 12, minHeight: 52, borderRadius: 12, backgroundColor: "#9b2c2c", alignItems: "center", justifyContent: "center", paddingHorizontal: 18 },
   error: { marginTop: 18, color: "#b42318", fontSize: 14, lineHeight: 20 },

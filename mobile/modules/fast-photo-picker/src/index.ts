@@ -27,7 +27,18 @@ export type PhotoUploadResult = {
   automaticRetryCount: number;
 };
 
+export type PhotoUploadProgressEvent = {
+  completedCount: number;
+  totalCount: number;
+};
+
+type EventSubscription = { remove(): void };
+
 type FastPhotoPickerModule = {
+  addListener(
+    eventName: "onUploadProgress",
+    listener: (event: PhotoUploadProgressEvent) => void,
+  ): EventSubscription;
   pickPhotos(limit: number, categoryName: string): Promise<PhotoPickerResult>;
   pickPhotosWithSystemPicker(limit: number): Promise<PhotoPickerResult>;
   preparePhotos(

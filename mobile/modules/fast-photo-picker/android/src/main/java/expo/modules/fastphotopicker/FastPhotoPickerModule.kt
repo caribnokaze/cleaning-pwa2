@@ -31,6 +31,7 @@ class FastPhotoPickerModule : Module() {
 
   override fun definition() = ModuleDefinition {
     Name("FastPhotoPicker")
+    Events("onUploadProgress")
 
     AsyncFunction("pickPhotos") { limit: Int, categoryName: String, promise: Promise ->
       launchCustomPicker(limit, categoryName, promise)
@@ -142,8 +143,12 @@ class FastPhotoPickerModule : Module() {
             val outcome = if (simulatedFailure) UploadOutcome(false, true, "ステージング用の通信失敗を再現しました")
               else uploadFile(targets[index], photo.file)
             if (outcome.success) {
-              uploadedCount.incrementAndGet()
+              val completedCount = uploadedCount.incrementAndGet()
               uploadedBytes.addAndGet(photo.outputBytes)
+              sendEvent("onUploadProgress", mapOf(
+                "completedCount" to completedCount,
+                "totalCount" to count
+              ))
               success = true
               break
             }
