@@ -42,9 +42,26 @@ function createHarness() {
     s3Client,
     bucketName: "test-bucket",
     signUrl: async (_client, command) => `https://upload.invalid/${encodeURIComponent(command.input.Key)}`,
+    reportOptions: {
+      staff: [{ value: "担当者", label: "01 担当者" }],
+      sites: ["テスト現場", "別現場"],
+    },
   }));
   return { app, objects };
 }
+
+test("report options expose the same selectable values used by the Web form", async () => {
+  const { app } = createHarness();
+  await withServer(app, async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/mobile/report-options`);
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get("cache-control"), "no-store");
+    assert.deepEqual(await response.json(), {
+      staff: [{ value: "担当者", label: "01 担当者" }],
+      sites: ["テスト現場", "別現場"],
+    });
+  });
+});
 
 async function withServer(app, callback) {
   const server = http.createServer(app);
@@ -145,5 +162,18 @@ test("an upload ID cannot be reused for different report metadata", async () => 
     });
     assert.equal((await post(generalRequest)).status, 200);
     assert.equal((await post({ ...generalRequest, site: "別現場" })).status, 409);
+  });
+});
+
+test("uploads reject staff or sites that are not present in the Web choices", async () => {
+  const { app } = createHarness();
+  await withServer(app, async (baseUrl) => {
+    const post = (body) => fetch(`${baseUrl}/api/mobile/photos/presigned-urls`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    assert.equal((await post({ ...generalRequest, staff: "自由入力" })).status, 400);
+    assert.equal((await post({ ...generalRequest, site: "自由入力" })).status, 400);
   });
 });
