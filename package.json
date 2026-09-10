@@ -20,6 +20,7 @@
   },
   "scripts": {
     "start": "node server.js",
+    "test": "node --test test/*.test.js",
     "deploy:aws": "node scripts/deploy-aws.js",
     "deploy:lambda": "node scripts/deploy-lambda.js"
   }
