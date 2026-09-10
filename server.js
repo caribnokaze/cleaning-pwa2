@@ -17,6 +17,7 @@ const {
 
 const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 const { createMobileApiRouter } = require("./mobile-api");
+const { loadReportOptions } = require("./report-options");
 const app = express();
 const AUTH_COOKIE = "cleaning_auth";
 const AUTH_TTL_SECONDS = 12 * 60 * 60;
@@ -300,6 +301,7 @@ app.use(
     express,
     s3Client,
     bucketName: BUCKET_NAME,
+    reportOptions: loadReportOptions(),
   }),
 );
 

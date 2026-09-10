@@ -12,6 +12,8 @@ type UploadCategory = { id: string; runId: string; assetIds: string[] };
 type UploadJob = { version: 1; date: string; site: string; staff: string; workType: WorkType; workTime: string; categories: UploadCategory[]; createdAt: string };
 type UploadSummary = { requested: number; uploaded: number; bytes: number; preparationMs: number; uploadMs: number; automaticRetries: number; deleted?: number };
 type AuthSession = { version: 1; token: string; expiresAt: number };
+type SelectOption = { value: string; label: string };
+type ReportOptions = { staff: SelectOption[]; sites: string[] };
 
 const APP_ENV = process.env.EXPO_PUBLIC_APP_ENV || "";
 const API_URL = (process.env.EXPO_PUBLIC_MOBILE_API_URL || "").replace(/\/$/, "");
@@ -83,6 +85,13 @@ const isValidAuthSession = (value: unknown): value is AuthSession => {
     typeof session.expiresAt === "number" && Number.isFinite(session.expiresAt) &&
     session.expiresAt > Math.floor(Date.now() / 1000);
 };
+const isReportOptions = (value: unknown): value is ReportOptions => {
+  if (!value || typeof value !== "object") return false;
+  const options = value as Partial<ReportOptions>;
+  return Array.isArray(options.staff) && options.staff.length > 0 &&
+    options.staff.every((item) => typeof item?.value === "string" && !!item.value && typeof item.label === "string" && !!item.label) &&
+    Array.isArray(options.sites) && options.sites.length > 0 && options.sites.every((site) => typeof site === "string" && !!site);
+};
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>("login");
@@ -105,6 +114,9 @@ export default function App() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [uploadPhase, setUploadPhase] = useState("");
   const [uploadSummary, setUploadSummary] = useState<UploadSummary | null>(null);
+  const [reportOptions, setReportOptions] = useState<ReportOptions | null>(null);
+  const [optionsLoading, setOptionsLoading] = useState(false);
+  const [optionsReload, setOptionsReload] = useState(0);
 
   useEffect(() => {
     const restoreSession = async () => {
@@ -163,11 +175,45 @@ export default function App() {
     return () => clearInterval(timer);
   }, [loginRetrySeconds > 0]);
 
+  useEffect(() => {
+    if (!authToken || BUILD_CONFIGURATION_ERROR) return;
+    let active = true;
+    const loadOptions = async () => {
+      setOptionsLoading(true);
+      try {
+        const response = await fetch(`${API_URL}/api/mobile/report-options`, {
+          headers: { authorization: `Bearer ${authToken}` },
+        });
+        const body: unknown = await response.json();
+        if (response.status === 401) {
+          await clearAuthSession();
+          setScreen("login");
+          throw new Error("ログインの有効期限が切れました。もう一度ログインしてください。");
+        }
+        if (!response.ok || !isReportOptions(body)) throw new Error("担当者・現場の選択肢を読み込めませんでした。");
+        if (active) {
+          setReportOptions(body);
+          setError("");
+        }
+      } catch (optionsError) {
+        if (active) {
+          setReportOptions(null);
+          setError(optionsError instanceof Error ? optionsError.message : String(optionsError));
+        }
+      } finally {
+        if (active) setOptionsLoading(false);
+      }
+    };
+    void loadOptions();
+    return () => { active = false; };
+  }, [authToken, optionsReload]);
+
   const visibleCategories = useMemo(() => CATEGORIES.filter((category) =>
     category.group === "normal" ||
     (category.group === "regular" && includesRegular(workType)) ||
     (category.group === "filter" && includesFilter(workType))), [workType]);
-  const detailsValid = /^\d{4}-\d{2}-\d{2}$/.test(cleaningDate.trim()) && !!staffName.trim() && !!siteName.trim();
+  const detailsValid = /^\d{4}-\d{2}-\d{2}$/.test(cleaningDate.trim()) && !!reportOptions &&
+    reportOptions.staff.some((item) => item.value === staffName) && reportOptions.sites.includes(siteName);
   const categoryComplete = (category: Category) => {
     const count = selections[category.id]?.assetIds.length ?? 0;
     return count >= category.min && count <= category.max;
@@ -389,8 +435,9 @@ export default function App() {
           <Text style={styles.title}>報告情報を入力</Text>
           <Text style={styles.description}>現在のWeb版と同じ情報を入力します。</Text>
           <Field label="清掃日"><TextInput style={styles.input} value={cleaningDate} onChangeText={setCleaningDate} placeholder="YYYY-MM-DD" autoCapitalize="none" /></Field>
-          <Field label="担当者"><TextInput style={styles.input} value={staffName} onChangeText={setStaffName} placeholder="担当者名を検索・入力" /></Field>
-          <Field label="現場"><TextInput style={styles.input} value={siteName} onChangeText={setSiteName} placeholder="現場名を検索・入力" /></Field>
+          <Field label="担当者"><SearchableSelect value={staffName} options={reportOptions?.staff ?? []} onSelect={setStaffName} placeholder="番号または氏名を入力して検索" loading={optionsLoading} /></Field>
+          <Field label="現場"><SearchableSelect value={siteName} options={(reportOptions?.sites ?? []).map((site) => ({ value: site, label: site }))} onSelect={setSiteName} placeholder="現場名を入力して検索" loading={optionsLoading} /></Field>
+          {!reportOptions && !optionsLoading && <SecondaryButton label="選択肢を再読み込み" onPress={() => setOptionsReload((value) => value + 1)} />}
           <Text style={styles.sectionLabel}>作業区分 <Text style={styles.required}>必須</Text></Text>
           {WORK_TYPES.map((item) => {
             const selected = item.id === workType;
@@ -460,6 +507,39 @@ export default function App() {
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return <View style={styles.field}><Text style={styles.sectionLabel}>{label} <Text style={styles.required}>必須</Text></Text>{children}</View>;
 }
+function normalizeSearch(value: string) {
+  return value.normalize("NFKC").toLocaleLowerCase("ja").replace(/\s+/g, "");
+}
+function SearchableSelect({ value, options, onSelect, placeholder, loading }: { value: string; options: SelectOption[]; onSelect: (value: string) => void; placeholder: string; loading: boolean }) {
+  const selected = options.find((item) => item.value === value);
+  const [query, setQuery] = useState("");
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (value) setQuery(selected?.label ?? value);
+  }, [value, selected?.label]);
+  const normalized = normalizeSearch(query);
+  const matches = options.filter((item) => !normalized || [item.label, item.value].some((candidate) => normalizeSearch(candidate).includes(normalized)));
+  const visible = matches.slice(0, 30);
+  return <View>
+    <TextInput
+      style={styles.input}
+      value={query}
+      onFocus={() => setOpen(true)}
+      onChangeText={(text) => { setQuery(text); onSelect(""); setOpen(true); }}
+      placeholder={loading ? "選択肢を読み込み中…" : placeholder}
+      editable={!loading}
+      autoCorrect={false}
+      accessibilityRole="search"
+    />
+    {open && !loading && <View style={styles.selectOptions}>
+      {visible.map((item) => <Pressable key={item.value} style={[styles.selectOption, item.value === value && styles.selectOptionSelected]} onPress={() => { onSelect(item.value); setQuery(item.label); setOpen(false); }} accessibilityRole="button">
+        <Text style={[styles.selectOptionText, item.value === value && styles.selectOptionTextSelected]}>{item.label}</Text>
+      </Pressable>)}
+      {!visible.length && <Text style={styles.selectEmpty}>一致する選択肢がありません</Text>}
+      {matches.length > visible.length && <Text style={styles.selectHint}>候補が多いため、文字を追加して絞り込んでください</Text>}
+    </View>}
+  </View>;
+}
 function PrimaryButton({ label, onPress, disabled, compact }: { label: string; onPress: () => void; disabled?: boolean; compact?: boolean }) {
   return <Pressable style={[styles.primaryButton, compact && styles.compactButton, disabled && styles.buttonDisabled]} onPress={onPress} disabled={disabled}><Text style={styles.primaryButtonText}>{label}</Text></Pressable>;
 }
@@ -486,6 +566,13 @@ const styles = StyleSheet.create({
   container: { padding: 20, paddingBottom: 48 }, title: { fontSize: 24, fontWeight: "900", color: "#173c33", marginTop: 4 }, description: { fontSize: 14, lineHeight: 21, color: "#60706c", marginTop: 8, marginBottom: 20 },
   field: { marginBottom: 17 }, sectionLabel: { color: "#294b42", fontSize: 15, fontWeight: "800", marginBottom: 8 }, required: { color: "#b42318", fontSize: 11 },
   input: { borderWidth: 1, borderColor: "#aebcb7", borderRadius: 10, paddingHorizontal: 14, paddingVertical: 13, fontSize: 16, backgroundColor: "#fff" },
+  selectOptions: { marginTop: 5, borderWidth: 1, borderColor: "#c8d2ce", borderRadius: 10, overflow: "hidden", backgroundColor: "#fff" },
+  selectOption: { minHeight: 45, justifyContent: "center", paddingHorizontal: 14, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: "#e7ecea" },
+  selectOptionSelected: { backgroundColor: "#eaf5f1" },
+  selectOptionText: { color: "#344640", fontSize: 15 },
+  selectOptionTextSelected: { color: "#12634f", fontWeight: "800" },
+  selectEmpty: { padding: 14, color: "#6a7974", fontSize: 14 },
+  selectHint: { paddingHorizontal: 14, paddingVertical: 10, color: "#60706c", backgroundColor: "#f5f7f6", fontSize: 12 },
   choice: { flexDirection: "row", alignItems: "center", padding: 14, borderRadius: 10, borderWidth: 1, borderColor: "#c8d2ce", backgroundColor: "#fff", marginBottom: 9 }, choiceSelected: { borderColor: "#16745e", backgroundColor: "#eaf5f1" },
   radio: { width: 19, height: 19, borderRadius: 10, borderWidth: 2, borderColor: "#8b9994", marginRight: 11 }, radioSelected: { borderWidth: 6, borderColor: "#16745e", backgroundColor: "#fff" }, choiceText: { fontSize: 15, color: "#344640" }, choiceTextSelected: { color: "#12634f", fontWeight: "800" },
   primaryButton: { marginTop: 14, minHeight: 52, borderRadius: 12, backgroundColor: "#16745e", alignItems: "center", justifyContent: "center", paddingHorizontal: 18 }, compactButton: { flex: 1, marginTop: 0 }, primaryButtonText: { color: "#fff", fontSize: 16, fontWeight: "800" }, buttonDisabled: { opacity: 0.35 },

@@ -49,8 +49,16 @@ function createMobileApiRouter({
   s3Client,
   bucketName,
   signUrl = getSignedUrl,
+  reportOptions = { staff: [], sites: [] },
 }) {
   const router = express.Router();
+  const allowedStaff = new Set(reportOptions.staff.map((item) => item.value));
+  const allowedSites = new Set(reportOptions.sites);
+
+  router.get("/report-options", (_req, res) => {
+    res.set("Cache-Control", "no-store");
+    res.json(reportOptions);
+  });
 
   async function readManifest(uploadId) {
     try {
@@ -139,6 +147,8 @@ function createMobileApiRouter({
         !/^\d{4}-\d{2}-\d{2}$/.test(date || "") ||
         !isSafePathSegment(site) ||
         !isSafePathSegment(staff) ||
+        !allowedSites.has(site) ||
+        !allowedStaff.has(staff) ||
         !ALLOWED_PHOTO_IDS.has(photoId) ||
         !validFilterMinutes ||
         !validFiles
