@@ -19,6 +19,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.util.Collections
 import java.util.concurrent.Callable
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.math.max
@@ -28,6 +29,7 @@ class FastPhotoPickerModule : Module() {
   private var pendingPromise: Promise? = null
   private var pendingRequestCode = 0
   private val workExecutor = Executors.newSingleThreadExecutor()
+  private val preparedPhotoCache = ConcurrentHashMap<String, ByteArray>()
 
   override fun definition() = ModuleDefinition {
     Name("FastPhotoPicker")
@@ -97,6 +99,13 @@ class FastPhotoPickerModule : Module() {
       workExecutor.execute {
         val startedAt = SystemClock.elapsedRealtime()
         val prepared = prepareFiles(identifiers, maxWidth, jpegQuality)
+        prepared.files.forEach { (index, photo) ->
+          identifiers.getOrNull(index)?.let { identifier ->
+            runCatching { photo.file.readBytes() }.getOrNull()?.let { bytes ->
+              preparedPhotoCache[identifier] = bytes
+            }
+          }
+        }
         prepared.directory.deleteRecursively()
         promise.resolve(mapOf(
           "requestedCount" to identifiers.size,
@@ -125,18 +134,31 @@ class FastPhotoPickerModule : Module() {
       workExecutor.execute {
         val totalStartedAt = SystemClock.elapsedRealtime()
         val preparationStartedAt = SystemClock.elapsedRealtime()
-        val prepared = prepareFiles(assetIds.take(count), maxWidth, jpegQuality)
-        val preparationMs = (SystemClock.elapsedRealtime() - preparationStartedAt).toInt()
-        val failed = Collections.synchronizedSet(prepared.failedIndexes.toMutableSet())
-        val firstError = Collections.synchronizedList(
-          mutableListOf<String>().apply { if (prepared.firstError.isNotEmpty()) add(prepared.firstError) }
-        )
+        val context = appContext.reactContext
+        if (context == null) {
+          promise.reject("ERR_PHOTO_CONTEXT", "写真を読み込めません", null)
+          return@execute
+        }
+        val directory = File(context.cacheDir, "tocoro-upload-${System.nanoTime()}").apply { mkdirs() }
+        val failed = Collections.synchronizedSet(mutableSetOf<Int>())
+        val firstError = Collections.synchronizedList(mutableListOf<String>())
         val uploadedCount = AtomicInteger(0)
         val uploadedBytes = AtomicInteger(0)
         val retryCount = AtomicInteger(0)
-        val uploadStartedAt = SystemClock.elapsedRealtime()
-        val uploadExecutor = Executors.newFixedThreadPool(4)
-        val tasks = prepared.files.map { (index, photo) -> Callable {
+        val lastPreparationFinishedAt = java.util.concurrent.atomic.AtomicLong(preparationStartedAt)
+        val firstUploadStartedAt = java.util.concurrent.atomic.AtomicLong(0)
+        val pipelineExecutor = Executors.newFixedThreadPool(4)
+        val tasks = assetIds.take(count).mapIndexed { index, identifier -> Callable {
+          val photo = try {
+            preparePhoto(identifier, index, directory, maxWidth, jpegQuality)
+          } catch (error: Exception) {
+            failed.add(index)
+            if (firstError.isEmpty()) firstError.add(error.message ?: "端末内の写真原本を準備できません")
+            null
+          }
+          lastPreparationFinishedAt.set(SystemClock.elapsedRealtime())
+          if (photo == null) return@Callable false
+          firstUploadStartedAt.compareAndSet(0, SystemClock.elapsedRealtime())
           var success = false
           for (attempt in 0..3) {
             val simulatedFailure = simulationMode == "manual-retry" && (index + 1) % 10 == 0
@@ -164,12 +186,15 @@ class FastPhotoPickerModule : Module() {
           success
         } }
         try {
-          uploadExecutor.invokeAll(tasks)
+          pipelineExecutor.invokeAll(tasks)
         } finally {
-          uploadExecutor.shutdown()
-          prepared.directory.deleteRecursively()
+          pipelineExecutor.shutdown()
+          directory.deleteRecursively()
         }
-        val uploadMs = (SystemClock.elapsedRealtime() - uploadStartedAt).toInt()
+        val finishedAt = SystemClock.elapsedRealtime()
+        val preparationMs = (lastPreparationFinishedAt.get() - preparationStartedAt).toInt()
+        val uploadStartedAt = firstUploadStartedAt.get().takeIf { it > 0 } ?: finishedAt
+        val uploadMs = (finishedAt - uploadStartedAt).toInt()
         promise.resolve(mapOf(
           "requestedCount" to count,
           "uploadedCount" to uploadedCount.get(),
@@ -217,6 +242,35 @@ class FastPhotoPickerModule : Module() {
     val firstError: String
   )
   private data class UploadOutcome(val success: Boolean, val retryable: Boolean, val error: String)
+
+  private fun preparePhoto(
+    identifier: String,
+    index: Int,
+    directory: File,
+    maxWidth: Double,
+    jpegQuality: Double
+  ): PreparedPhoto {
+    val context = appContext.reactContext ?: error("写真を読み込めません")
+    val output = File(directory, "%03d.jpg".format(index + 1))
+    preparedPhotoCache.remove(identifier)?.let { bytes ->
+      output.writeBytes(bytes)
+      return PreparedPhoto(output, bytes.size)
+    }
+    val uri = Uri.parse(identifier)
+    val bitmap = decodeAndOrientBitmap(uri, maxWidth.coerceIn(1.0, 4096.0).roundToInt())
+      ?: error("写真を展開できません")
+    try {
+      FileOutputStream(output).use { stream ->
+        val quality = (jpegQuality.coerceIn(0.0, 1.0) * 100).roundToInt()
+        if (!bitmap.compress(Bitmap.CompressFormat.JPEG, quality, stream)) {
+          error("JPEGへ変換できません")
+        }
+      }
+    } finally {
+      bitmap.recycle()
+    }
+    return PreparedPhoto(output, output.length().coerceAtMost(Int.MAX_VALUE.toLong()).toInt())
+  }
 
   private fun prepareFiles(
     assetIds: List<String>, maxWidth: Double, jpegQuality: Double
