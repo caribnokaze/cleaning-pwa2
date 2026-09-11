@@ -289,7 +289,7 @@ export default function App() {
       const result = await FastPhotoPicker.pickPhotos(category.max, category.label);
       setSelections((current) => ({ ...current, [category.id]: result }));
       if (result.assetIds.length) {
-        void FastPhotoPicker.preparePhotos(result.assetIds, 720, 0.6).catch(() => undefined);
+        void FastPhotoPicker.preparePhotos(result.assetIds, 720, 0.8).catch(() => undefined);
       }
     } catch (pickerError) {
       setError(pickerError instanceof Error ? pickerError.message : String(pickerError));
@@ -409,7 +409,7 @@ export default function App() {
         let nativeResult: PhotoUploadResult;
         try {
           nativeResult = await FastPhotoPicker.prepareAndUploadPhotos(
-            missing.map((index) => item.assetIds[index]), uploadUrls, 720, 0.6, "none",
+            missing.map((index) => item.assetIds[index]), uploadUrls, 720, 0.8, "none",
           );
         } finally {
           progressSubscription.remove();
