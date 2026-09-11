@@ -16,7 +16,7 @@ type UploadCategory = { id: string; runId: string; assetIds: string[] };
 type UploadJob = { version: 1; date: string; site: string; staff: string; workType: WorkType; workTime: string; categories: UploadCategory[]; createdAt: string };
 type UploadSummary = { requested: number; uploaded: number; bytes: number; preparationMs: number; uploadMs: number; automaticRetries: number; deleted?: number };
 type UploadProgress = { completed: number; total: number };
-type AuthSession = { version: 1; token: string; expiresAt: number };
+type AuthSession = { version: 2; token: string };
 type SelectOption = { value: string; label: string; aliases?: string[] };
 type ReportOptions = { staff: SelectOption[]; sites: string[] };
 
@@ -66,7 +66,8 @@ const STAGING_API_ORIGIN = "https://bjm3jjmvgw2s3ztryzevgvyzx40sztln.lambda-url.
 const IS_PRODUCTION = APP_ENV === "production";
 const IS_STAGING_BUILD = APP_ENV === "development" || APP_ENV === "preview";
 const UPLOAD_JOB_KEY = IS_PRODUCTION ? "tocoro.production-ui.production-upload.v1" : "tocoro.production-ui.staging-upload.v1";
-const AUTH_SESSION_KEY = IS_PRODUCTION ? "tocoro.production-ui.production-auth.v1" : "tocoro.production-ui.staging-auth.v1";
+const AUTH_SESSION_KEY = IS_PRODUCTION ? "tocoro.production-ui.production-auth.v2" : "tocoro.production-ui.staging-auth.v2";
+const LEGACY_AUTH_SESSION_KEY = IS_PRODUCTION ? "tocoro.production-ui.production-auth.v1" : "tocoro.production-ui.staging-auth.v1";
 const DECLARED_MAX_COMPRESSED_BYTES = 2 * 1024 * 1024;
 
 const buildConfigurationError = () => {
@@ -134,9 +135,8 @@ const isUploadJob = (value: unknown): value is UploadJob => {
 const isValidAuthSession = (value: unknown): value is AuthSession => {
   if (!value || typeof value !== "object") return false;
   const session = value as Partial<AuthSession>;
-  return session.version === 1 && typeof session.token === "string" && !!session.token &&
-    typeof session.expiresAt === "number" && Number.isFinite(session.expiresAt) &&
-    session.expiresAt > Math.floor(Date.now() / 1000);
+  return session.version === 2 && typeof session.token === "string" &&
+    session.token.startsWith("mobile_v1.") && !!session.token;
 };
 const isReportOptions = (value: unknown): value is ReportOptions => {
   if (!value || typeof value !== "object") return false;
@@ -178,6 +178,7 @@ export default function App() {
   useEffect(() => {
     const restoreSession = async () => {
       try {
+        await SecureStore.deleteItemAsync(LEGACY_AUTH_SESSION_KEY).catch(() => undefined);
         const [storedJob, storedSession] = await Promise.all([
           AsyncStorage.getItem(UPLOAD_JOB_KEY),
           SecureStore.getItemAsync(AUTH_SESSION_KEY),
@@ -245,7 +246,7 @@ export default function App() {
         if (response.status === 401) {
           await clearAuthSession();
           setScreen("login");
-          throw new Error("ログインの有効期限が切れました。もう一度ログインしてください。");
+          throw new Error("ログイン情報が無効になりました。もう一度ログインしてください。");
         }
         if (!response.ok || !isReportOptions(body)) throw new Error("担当者・現場の選択肢を読み込めませんでした。");
         if (active) {
@@ -310,8 +311,8 @@ export default function App() {
       setLoginRetrySeconds(waitSeconds);
       throw new Error(`ログインが一時的に制限されています。${formatLoginRetryDelay(waitSeconds)}後に再試行してください。`);
     }
-    if (!response.ok || !body.token || !Number.isFinite(body.expiresAt)) throw new Error(body.error || "検証環境へログインできませんでした");
-    return { version: 1, token: body.token, expiresAt: body.expiresAt } satisfies AuthSession;
+    if (!response.ok || typeof body.token !== "string" || !body.token.startsWith("mobile_v1.")) throw new Error(body.error || "検証環境へログインできませんでした");
+    return { version: 2, token: body.token } satisfies AuthSession;
   };
 
   const clearAuthSession = async () => {
@@ -324,7 +325,7 @@ export default function App() {
     setAuthToken("");
     void SecureStore.deleteItemAsync(AUTH_SESSION_KEY).catch(() => undefined);
     setScreen("login");
-    throw new Error("ログインの有効期限が切れました。もう一度ログインしてください。");
+    throw new Error("ログイン情報が無効になりました。もう一度ログインしてください。");
   };
 
   const submitLogin = async () => {
@@ -349,11 +350,20 @@ export default function App() {
     if (isUploading || isDeleting || isLoggingIn) return;
     setError("");
     try {
+      if (authToken) {
+        const response = await fetch(`${API_URL}/api/mobile/logout`, {
+          method: "POST",
+          headers: { authorization: `Bearer ${authToken}` },
+        });
+        if (!response.ok && response.status !== 401) {
+          throw new Error("サーバーでログアウトできませんでした。通信状態を確認してください。");
+        }
+      }
       await clearAuthSession();
       setPassword(""); setPasswordVisible(false); setScreen("login");
       if (uploadJob) setUploadPhase("未完了の送信があります。ログイン後に再開できます。");
-    } catch {
-      setError("ログアウト情報を端末から削除できませんでした。");
+    } catch (logoutError) {
+      setError(logoutError instanceof Error ? logoutError.message : "ログアウトできませんでした。");
     }
   };
 
@@ -511,7 +521,7 @@ export default function App() {
       {screen === "gallery" ? <GalleryScreen apiUrl={API_URL} authToken={authToken} onSessionExpired={() => { void clearAuthSession(); setScreen("login"); }} onBusyChange={setIsGalleryBusy} /> : <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
         {screen === "login" && <>
           <Text style={styles.title}>ログイン</Text>
-          <Text style={styles.description}>清掃写真報告を始めるため、共通パスワードを入力してください。パスワードは端末へ保存しません。</Text>
+          <Text style={styles.description}>初回認証のため、共通パスワードを入力してください。パスワードは端末へ保存せず、ログアウトまたは端末変更までは再入力不要です。</Text>
           {!!uploadJob && <View style={styles.notice}><Text style={styles.noticeTitle}>未完了の送信があります</Text><Text style={styles.noticeText}>ログイン後、確認画面から未完了分だけ再開できます。</Text></View>}
           <TextInput style={styles.passwordInput} value={password} onChangeText={setPassword} placeholder={IS_PRODUCTION ? "パスワード" : "検証環境のパスワード"} secureTextEntry={!passwordVisible} autoCapitalize="none" autoCorrect={false} editable={!isLoggingIn} onSubmitEditing={submitLogin} />
           {IS_PRODUCTION && <View style={styles.passwordHelp}><Pressable onPress={() => setPasswordVisible((visible) => !visible)} disabled={isLoggingIn}><Text style={styles.passwordToggle}>{passwordVisible ? "隠す" : "表示する"}</Text></Pressable></View>}

@@ -7,7 +7,9 @@ const {
   S3Client,
   PutObjectCommand,
   GetObjectCommand,
+  HeadObjectCommand,
   ListObjectsV2Command,
+  DeleteObjectCommand,
   DeleteObjectsCommand,
 } = require("@aws-sdk/client-s3");
 const {
@@ -21,7 +23,8 @@ const { loadReportOptions } = require("./report-options");
 const app = express();
 const AUTH_COOKIE = "cleaning_auth";
 const AUTH_TTL_SECONDS = 12 * 60 * 60;
-const MOBILE_AUTH_TTL_SECONDS = 72 * 60 * 60;
+const MOBILE_AUTH_PREFIX = "_system/mobile-auth-sessions/";
+const MOBILE_TOKEN_PREFIX = "mobile_v1.";
 let APP_PASSWORD = process.env.APP_PASSWORD || "";
 let AUTH_SECRET = process.env.AUTH_SECRET || "";
 const LOGIN_ATTEMPTS_PREFIX = process.env.LOGIN_ATTEMPTS_PREFIX || "";
@@ -72,6 +75,51 @@ function isValidAuthToken(token = "") {
   return safeEqual(signature, expected);
 }
 
+function mobileAuthKey(token) {
+  const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+  return `${MOBILE_AUTH_PREFIX}${tokenHash}.json`;
+}
+
+function isMobileAuthToken(token = "") {
+  return token.startsWith(MOBILE_TOKEN_PREFIX) &&
+    /^[A-Za-z0-9_-]{43}$/.test(token.slice(MOBILE_TOKEN_PREFIX.length));
+}
+
+async function createMobileAuthToken() {
+  const token = `${MOBILE_TOKEN_PREFIX}${crypto.randomBytes(32).toString("base64url")}`;
+  await s3Client.send(new PutObjectCommand({
+    Bucket: BUCKET_NAME,
+    Key: mobileAuthKey(token),
+    Body: JSON.stringify({ version: 1, createdAt: new Date().toISOString() }),
+    ContentType: "application/json",
+  }));
+  return token;
+}
+
+async function isValidMobileAuthToken(token = "") {
+  if (!isMobileAuthToken(token)) return false;
+  try {
+    await s3Client.send(new HeadObjectCommand({
+      Bucket: BUCKET_NAME,
+      Key: mobileAuthKey(token),
+    }));
+    return true;
+  } catch (error) {
+    if (error?.name === "NoSuchKey" || error?.name === "NotFound" || error?.$metadata?.httpStatusCode === 404) {
+      return false;
+    }
+    throw error;
+  }
+}
+
+async function revokeMobileAuthToken(token = "") {
+  if (!isMobileAuthToken(token)) return;
+  await s3Client.send(new DeleteObjectCommand({
+    Bucket: BUCKET_NAME,
+    Key: mobileAuthKey(token),
+  }));
+}
+
 function getCookie(req, name) {
   const cookies = req.headers.cookie || "";
   for (const item of cookies.split(";")) {
@@ -85,6 +133,19 @@ function getRequestAuthToken(req) {
   const authorization = String(req.get("authorization") || "");
   const bearerMatch = authorization.match(/^Bearer\s+(.+)$/i);
   return bearerMatch?.[1] || getCookie(req, AUTH_COOKIE);
+}
+
+function getBearerAuthToken(req) {
+  const authorization = String(req.get("authorization") || "");
+  return authorization.match(/^Bearer\s+(.+)$/i)?.[1] || "";
+}
+
+async function hasValidRequestAuth(req) {
+  const bearerToken = getBearerAuthToken(req);
+  if (bearerToken) {
+    return isValidAuthToken(bearerToken) || await isValidMobileAuthToken(bearerToken);
+  }
+  return isValidAuthToken(getCookie(req, AUTH_COOKIE));
 }
 
 function authCookie(req, value, maxAge = AUTH_TTL_SECONDS) {
@@ -231,13 +292,23 @@ app.post("/api/mobile/login", async (req, res) => {
     }
 
     await clearLoginAttempts(req.ip, "mobile");
-    const token = createAuthToken(MOBILE_AUTH_TTL_SECONDS);
-    const expiresAt = Number(token.split(".")[0]);
+    const token = await createMobileAuthToken();
     res.set("Cache-Control", "no-store");
-    res.json({ token, expiresAt });
+    res.json({ token });
   } catch (error) {
     console.error("Mobile login processing failed:", error);
     res.status(500).json({ error: "ログイン処理に失敗しました" });
+  }
+});
+
+app.post("/api/mobile/logout", async (req, res) => {
+  try {
+    await revokeMobileAuthToken(getBearerAuthToken(req));
+    res.set("Cache-Control", "no-store");
+    res.status(204).end();
+  } catch (error) {
+    console.error("Mobile logout processing failed:", error);
+    res.status(500).json({ error: "ログアウト処理に失敗しました" });
   }
 });
 
@@ -246,15 +317,20 @@ app.get("/logout", (req, res) => {
   res.redirect("/login");
 });
 
-app.use((req, res, next) => {
-  if (isValidAuthToken(getRequestAuthToken(req))) return next();
-  if (
-    req.path.startsWith("/api/") ||
-    req.path.startsWith("/get-presigned-url")
-  ) {
-    return res.status(401).json({ error: "ログインが必要です" });
+app.use(async (req, res, next) => {
+  try {
+    if (await hasValidRequestAuth(req)) return next();
+    if (
+      req.path.startsWith("/api/") ||
+      req.path.startsWith("/get-presigned-url")
+    ) {
+      return res.status(401).json({ error: "ログインが必要です" });
+    }
+    res.redirect("/login");
+  } catch (error) {
+    console.error("Authentication validation failed:", error);
+    res.status(503).json({ error: "認証状態を確認できませんでした" });
   }
-  res.redirect("/login");
 });
 
 app.get("/api/session", (req, res) => {
