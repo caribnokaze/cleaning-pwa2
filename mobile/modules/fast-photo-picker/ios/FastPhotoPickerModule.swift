@@ -5,6 +5,8 @@ import UIKit
 
 public final class FastPhotoPickerModule: Module {
   private var systemPickerDelegate: SystemPhotoPickerDelegate?
+  private let preparedPhotoCacheLock = NSLock()
+  private var preparedPhotoCache: [String: Data] = [:]
 
   public func definition() -> ModuleDefinition {
     Name("FastPhotoPicker")
@@ -127,6 +129,9 @@ public final class FastPhotoPickerModule: Module {
               sourceBytes += sourceData.count
               outputBytes += jpegData.count
               resultLock.unlock()
+              self.preparedPhotoCacheLock.lock()
+              self.preparedPhotoCache[identifier] = jpegData
+              self.preparedPhotoCacheLock.unlock()
             }
           }
         }
@@ -180,12 +185,23 @@ public final class FastPhotoPickerModule: Module {
         let assets = PHAsset.fetchAssets(withLocalIdentifiers: identifiers, options: nil)
         var assetsById: [String: PHAsset] = [:]
         assets.enumerateObjects { asset, _, _ in assetsById[asset.localIdentifier] = asset }
-        let prepareGroup = DispatchGroup()
+        let pipelineGroup = DispatchGroup()
         let prepareConcurrency = DispatchSemaphore(value: 2)
+        let uploadConcurrency = DispatchSemaphore(value: 4)
         let resultLock = NSLock()
-        var preparedFiles: [Int: (url: URL, size: Int)] = [:]
         var failedIndexes: [Int] = []
         var firstError = ""
+        var uploadedCount = 0
+        var uploadedBytes = 0
+        var automaticRetryCount = 0
+        var lastPreparationFinishedAt = preparationStartedAt
+        var firstUploadStartedAt: CFAbsoluteTime?
+        let maxAutomaticRetries = 3
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.timeoutIntervalForRequest = 60
+        configuration.timeoutIntervalForResource = 300
+        configuration.httpMaximumConnectionsPerHost = 4
+        let session = URLSession(configuration: configuration)
 
         for (index, identifier) in identifiers.enumerated() {
           guard let asset = assetsById[identifier] else {
@@ -195,63 +211,58 @@ public final class FastPhotoPickerModule: Module {
             resultLock.unlock()
             continue
           }
-          prepareGroup.enter()
+          pipelineGroup.enter()
           DispatchQueue.global(qos: .userInitiated).async {
             prepareConcurrency.wait()
-            defer { prepareConcurrency.signal(); prepareGroup.leave() }
-            autoreleasepool {
-              guard let sourceData = Self.loadLocalImageData(for: asset),
-                    let image = UIImage(data: sourceData),
-                    let jpegData = Self.resizeAndCompress(
-                      image: image,
-                      maxWidth: width,
-                      quality: quality
-                    ) else {
+            let preparedFile: (url: URL, size: Int)? = autoreleasepool {
+              self.preparedPhotoCacheLock.lock()
+              let cachedData = self.preparedPhotoCache.removeValue(forKey: identifier)
+              self.preparedPhotoCacheLock.unlock()
+              let jpegData: Data?
+              if let cachedData {
+                jpegData = cachedData
+              } else if let sourceData = Self.loadLocalImageData(for: asset),
+                        let image = UIImage(data: sourceData) {
+                jpegData = Self.resizeAndCompress(image: image, maxWidth: width, quality: quality)
+              } else {
+                jpegData = nil
+              }
+              guard let jpegData else {
                 resultLock.lock()
                 if firstError.isEmpty { firstError = "端末内の写真原本を準備できません" }
                 failedIndexes.append(index)
                 resultLock.unlock()
-                return
+                return nil
               }
               let fileURL = temporaryDirectory.appendingPathComponent(
                 String(format: "%03d.jpg", index + 1)
               )
               do {
                 try jpegData.write(to: fileURL, options: .atomic)
-                resultLock.lock()
-                preparedFiles[index] = (fileURL, jpegData.count)
-                resultLock.unlock()
+                return (fileURL, jpegData.count)
               } catch {
                 resultLock.lock()
                 if firstError.isEmpty { firstError = "一時JPEGを保存できません" }
                 failedIndexes.append(index)
                 resultLock.unlock()
+                return nil
               }
             }
-          }
-        }
+            resultLock.lock()
+            lastPreparationFinishedAt = CFAbsoluteTimeGetCurrent()
+            resultLock.unlock()
+            prepareConcurrency.signal()
+            guard let file = preparedFile, let targetURL = URL(string: targets[index]) else {
+              pipelineGroup.leave()
+              return
+            }
 
-        prepareGroup.wait()
-        let preparationMs = Int(
-          (CFAbsoluteTimeGetCurrent() - preparationStartedAt) * 1000
-        )
-        let uploadStartedAt = CFAbsoluteTimeGetCurrent()
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.timeoutIntervalForRequest = 60
-        configuration.timeoutIntervalForResource = 300
-        configuration.httpMaximumConnectionsPerHost = 4
-        let session = URLSession(configuration: configuration)
-        let uploadGroup = DispatchGroup()
-        var uploadedCount = 0
-        var uploadedBytes = 0
-        var automaticRetryCount = 0
-        let maxAutomaticRetries = 3
-
-        for (index, file) in preparedFiles {
-          guard let targetURL = URL(string: targets[index]) else { continue }
-          uploadGroup.enter()
-          var uploadAttempt: ((Int) -> Void)!
-          uploadAttempt = { attempt in
+            uploadConcurrency.wait()
+            resultLock.lock()
+            if firstUploadStartedAt == nil { firstUploadStartedAt = CFAbsoluteTimeGetCurrent() }
+            resultLock.unlock()
+            var uploadAttempt: ((Int) -> Void)!
+            uploadAttempt = { attempt in
             // ステージング実機試験専用。10枚ごとに全自動再試行を失敗させ、
             // JavaScript側の「失敗分だけ手動再送」を検証する。
             if simulationMode == "manual-retry" && (index + 1).isMultiple(of: 10) {
@@ -267,7 +278,8 @@ public final class FastPhotoPickerModule: Module {
                 failedIndexes.append(index)
                 if firstError.isEmpty { firstError = "ステージング用の通信失敗を再現しました" }
                 resultLock.unlock()
-                uploadGroup.leave()
+                uploadConcurrency.signal()
+                pipelineGroup.leave()
               }
               return
             }
@@ -287,7 +299,8 @@ public final class FastPhotoPickerModule: Module {
                   "completedCount": completedCount,
                   "totalCount": count,
                 ])
-                uploadGroup.leave()
+                uploadConcurrency.signal()
+                pipelineGroup.leave()
                 return
               }
 
@@ -310,16 +323,20 @@ public final class FastPhotoPickerModule: Module {
               failedIndexes.append(index)
               if firstError.isEmpty { firstError = detail }
               resultLock.unlock()
-              uploadGroup.leave()
+              uploadConcurrency.signal()
+              pipelineGroup.leave()
             }.resume()
           }
           uploadAttempt(0)
+          }
         }
 
-        uploadGroup.notify(queue: .main) {
+        pipelineGroup.notify(queue: .main) {
           session.finishTasksAndInvalidate()
           try? FileManager.default.removeItem(at: temporaryDirectory)
-          let uploadMs = Int((CFAbsoluteTimeGetCurrent() - uploadStartedAt) * 1000)
+          let finishedAt = CFAbsoluteTimeGetCurrent()
+          let preparationMs = Int((lastPreparationFinishedAt - preparationStartedAt) * 1000)
+          let uploadMs = Int((finishedAt - (firstUploadStartedAt ?? finishedAt)) * 1000)
           promise.resolve([
             "requestedCount": count,
             "uploadedCount": uploadedCount,

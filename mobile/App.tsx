@@ -288,6 +288,9 @@ export default function App() {
     try {
       const result = await FastPhotoPicker.pickPhotos(category.max, category.label);
       setSelections((current) => ({ ...current, [category.id]: result }));
+      if (result.assetIds.length) {
+        void FastPhotoPicker.preparePhotos(result.assetIds, 720, 0.45).catch(() => undefined);
+      }
     } catch (pickerError) {
       setError(pickerError instanceof Error ? pickerError.message : String(pickerError));
     } finally {
