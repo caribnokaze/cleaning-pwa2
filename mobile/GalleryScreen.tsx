@@ -228,7 +228,7 @@ export default function GalleryScreen({
           picked.assetIds,
           targets.map((target: { uploadUrl: string }) => target.uploadUrl),
           720,
-          0.45,
+          0.6,
           "none",
         );
         if (result.uploadedCount !== files.length || result.failedCount) throw new Error(result.firstError || "一部の写真を追加できませんでした");
