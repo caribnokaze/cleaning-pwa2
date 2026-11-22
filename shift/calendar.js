@@ -8,13 +8,13 @@ const next = document.getElementById("next");
 const reload = document.getElementById("reload");
 const legacyNotice = document.getElementById("legacy-notice");
 const weekday = ["日", "月", "火", "水", "木", "金", "土"];
-const shiftStaffKey = "selectedShiftStaffForLoginSession";
+const reportStaffKey = "selectedStaffForLoginSession";
 let calendarRequest;
 
 function restoreStaff() {
   try {
-    const remembered = localStorage.getItem(shiftStaffKey)
-      ?? localStorage.getItem("selectedStaffForLoginSession");
+    const remembered = localStorage.getItem(reportStaffKey);
+    localStorage.removeItem("selectedShiftStaffForLoginSession");
     staff.value = [...staff.options].some((option) => option.value === remembered) ? remembered : "";
   } catch {
     // ストレージを使えない端末でも担当者を選択できます。
@@ -22,11 +22,6 @@ function restoreStaff() {
 }
 
 function selectStaff() {
-  try {
-    localStorage.setItem(shiftStaffKey, staff.value);
-  } catch {
-    // 選択中の担当者で、そのままカレンダーを表示します。
-  }
   void loadCalendar();
 }
 
