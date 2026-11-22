@@ -10,31 +10,43 @@
 </head>
 <body>
   <header>
-    <strong>TOCORO. 清掃管理</strong>
-    <nav aria-label="ページ操作">
-      <a href="/index.html">清掃報告</a>
-      <a href="/gallery.html">写真一覧</a>
-      <a href="/logout">ログアウト</a>
-    </nav>
+    <div class="header-row">
+      <h1>希望シフト</h1>
+      <nav class="header-links" aria-label="ページ操作">
+        <a class="back-link" href="/index.html">清掃報告</a>
+        <a class="back-link" href="/gallery.html">写真一覧</a>
+        <a class="back-link logout-link" href="/logout">ログアウト</a>
+      </nav>
+    </div>
   </header>
   <main>
-    <h1>希望シフト</h1>
-    <label for="staff">担当者</label>
-    <select id="staff" disabled><option value="">担当者を選択</option></select>
-    <div class="month">
-      <button id="previous" type="button" disabled>前月</button>
-      <select id="month" aria-label="表示する年月" disabled><option value="">年月を選択</option></select>
-      <button id="next" type="button" disabled>翌月</button>
-      <button id="reload" type="button" disabled>再読み込み</button>
-    </div>
-    <p id="legacy-notice" hidden>GAS更新までは、複数提出がある場合に一番下の回答が表示されるとは限りません。</p>
+    <section class="filters" aria-label="表示条件">
+      <div class="field staff-field">
+        <label for="staff">担当者</label>
+        <select id="staff" disabled><option value="">担当者を選択</option></select>
+      </div>
+      <div class="field month-field">
+        <label for="month">表示する年月</label>
+        <div class="month">
+          <button id="previous" type="button" disabled>前月</button>
+          <select id="month" disabled><option value="">年月を選択</option></select>
+          <button id="next" type="button" disabled>翌月</button>
+          <button id="reload" type="button" disabled>再読み込み</button>
+        </div>
+      </div>
+    </section>
+    <p id="legacy-notice" class="notice" hidden>GAS更新までは、複数提出がある場合に一番下の回答が表示されるとは限りません。</p>
     <p id="status" role="status"></p>
-    <div class="week" aria-hidden="true"><span class="sunday-heading">日</span><span>月</span><span>火</span><span>水</span><span>木</span><span>金</span><span class="saturday-heading">土</span></div>
-    <div id="days" class="week" role="group" aria-label="月間カレンダー"></div>
-    <div class="legend" aria-label="カレンダーの凡例">
-      <span class="code">数値回答</span><span class="rest">休</span><span class="pending">未定</span>
-    </div>
-    <p id="detail" aria-live="polite"></p>
+    <section class="calendar-card" aria-label="希望シフトカレンダー">
+      <div class="week weekday-row" aria-hidden="true"><span class="sunday-heading">日</span><span>月</span><span>火</span><span>水</span><span>木</span><span>金</span><span class="saturday-heading">土</span></div>
+      <div id="days" class="week" role="group" aria-label="月間カレンダー"></div>
+      <div class="calendar-footer">
+        <div class="legend" aria-label="カレンダーの凡例">
+          <span class="code">数値回答</span><span class="rest">休</span><span class="pending">未定</span>
+        </div>
+        <p id="detail" aria-live="polite"></p>
+      </div>
+    </section>
   </main>
 </body>
 </html>
