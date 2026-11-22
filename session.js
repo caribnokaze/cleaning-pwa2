@@ -1,9 +1,11 @@
 (() => {
   const nativeFetch = window.fetch.bind(window);
   let expiryTimer;
+  let redirecting = false;
 
   function returnToLogin() {
-    if (window.location.pathname !== "/login") {
+    if (!redirecting && window.location.pathname !== "/login") {
+      redirecting = true;
       window.location.replace("/login?expired=1");
     }
   }
@@ -44,8 +46,11 @@
   };
 
   window.addEventListener("pageshow", checkSession);
+  window.addEventListener("focus", checkSession);
+  window.addEventListener("online", checkSession);
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible") checkSession();
   });
   window.setInterval(checkSession, 60 * 1000);
+  checkSession();
 })();

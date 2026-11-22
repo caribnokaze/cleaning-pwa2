@@ -7,4 +7,6 @@ node_modules
 mobile
 mobile-free
 .expo*
+.local-tools
+capacitor-app
 npm-debug.log*

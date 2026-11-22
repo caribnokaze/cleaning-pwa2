@@ -7,6 +7,8 @@ require("dotenv").config({
   path: IS_MOBILE_STAGING ? ".env.mobile-staging" : ".env",
 });
 const { spawnSync } = require("child_process");
+const fs = require("fs");
+const path = require("path");
 const {
   STSClient,
   GetCallerIdentityCommand,
@@ -109,8 +111,12 @@ const clients = {
 };
 
 function run(command, args, options = {}) {
-  console.log(`> ${command} ${args.join(" ")}`);
-  const result = spawnSync(command, args, {
+  const commandArgs =
+    command === "docker" && process.env.DOCKER_CONFIG
+      ? ["--config", process.env.DOCKER_CONFIG, ...args]
+      : args;
+  console.log(`> ${command} ${commandArgs.join(" ")}`);
+  const result = spawnSync(command, commandArgs, {
     cwd: process.cwd(),
     stdio: [options.input ? "pipe" : "inherit", "inherit", "inherit"],
     input: options.input,
@@ -522,17 +528,32 @@ async function main() {
   const [, password] = Buffer.from(authData.authorizationToken, "base64")
     .toString("utf8")
     .split(":");
-  run(
-    "docker",
-    [
-      "login",
-      "--username",
-      "AWS",
-      "--password-stdin",
-      authData.proxyEndpoint,
-    ],
-    { input: `${password}\n` },
-  );
+  if (process.env.DOCKER_CONFIG) {
+    fs.mkdirSync(process.env.DOCKER_CONFIG, { recursive: true });
+    fs.writeFileSync(
+      path.join(process.env.DOCKER_CONFIG, "config.json"),
+      JSON.stringify({
+        auths: {
+          [authData.proxyEndpoint.replace(/^https?:\/\//, "")]: {
+            auth: authData.authorizationToken,
+          },
+        },
+      }),
+      { mode: 0o600 },
+    );
+  } else {
+    run(
+      "docker",
+      [
+        "login",
+        "--username",
+        "AWS",
+        "--password-stdin",
+        authData.proxyEndpoint,
+      ],
+      { input: `${password}\n` },
+    );
+  }
 
   const localImage = `${REPOSITORY_NAME}:${IMAGE_TAG}`;
   const remoteImage = `${repository.repositoryUri}:${IMAGE_TAG}`;

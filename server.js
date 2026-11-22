@@ -18,7 +18,7 @@ const {
 const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 const app = express();
 const AUTH_COOKIE = "cleaning_auth";
-const AUTH_TTL_SECONDS = 12 * 60 * 60;
+const AUTH_TTL_SECONDS = 7 * 24 * 60 * 60;
 let APP_PASSWORD = process.env.APP_PASSWORD || "";
 let AUTH_SECRET = process.env.AUTH_SECRET || "";
 const LOGIN_ATTEMPTS_PREFIX = process.env.LOGIN_ATTEMPTS_PREFIX || "";

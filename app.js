@@ -484,7 +484,7 @@ window.addEventListener("pageshow", (event) => {
  */
 const FILE_LIMITS = {
   photos_amenity: 10,
-  photos_general: 100,
+  photos_general: 130,
   photos_kitchen: 15,
   photos_bath: 15,
   photos_living: 15,
@@ -494,7 +494,7 @@ const FILE_LIMITS = {
   photos_others: 10,
   regular_1: 10,
   regular_2: 10,
-  regular_3: 10,
+  regular_3: 20,
   regular_4: 10,
   regular_5: 10,
   regular_6: 10,
@@ -660,6 +660,7 @@ async function send() {
 
     const CONCURRENT_UPLOADS = 4;
     let completedCount = 0;
+    let lastUploadError = null;
 
     const categoryCounts = new Map();
     tasks.forEach((task) => {
@@ -688,13 +689,65 @@ async function send() {
         }),
       });
 
-      if (!tokenRes.ok) throw new Error("アップロード準備に失敗しました");
+      if (tokenRes.status === 401) {
+        const error = new Error(
+          "ログインの有効期限が切れました。写真を選び直す前に、別タブで再ログインしてください。",
+        );
+        error.code = "AUTH_EXPIRED";
+        throw error;
+      }
+      if (!tokenRes.ok) {
+        throw new Error(`アップロード準備に失敗しました（${tokenRes.status}）`);
+      }
       const uploadTargets = await tokenRes.json();
       if (uploadTargets.length !== targetTasks.length) {
         throw new Error("アップロード準備件数が一致しません");
       }
       targetTasks.forEach((task, index) =>
         Object.assign(task, uploadTargets[index]),
+      );
+    }
+
+    // 一括発行が一時的に失敗した場合でも、従来の1枚用APIで送信を継続する。
+    async function prepareUploadTargetsIndividually(targetTasks) {
+      let nextTargetIndex = 0;
+
+      async function prepareWorker() {
+        while (nextTargetIndex < targetTasks.length) {
+          const task = targetTasks[nextTargetIndex++];
+          const tokenRes = await fetch("/get-presigned-url", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              date: reportDate,
+              site,
+              staff,
+              filename: task.filename,
+              contentType: "image/jpeg",
+              photoId: task.id,
+              label: task.label,
+            }),
+          });
+
+          if (tokenRes.status === 401) {
+            const error = new Error(
+              "ログインの有効期限が切れました。写真を選び直す前に、別タブで再ログインしてください。",
+            );
+            error.code = "AUTH_EXPIRED";
+            throw error;
+          }
+          if (!tokenRes.ok) {
+            throw new Error(`アップロード準備に失敗しました（${tokenRes.status}）`);
+          }
+          Object.assign(task, await tokenRes.json());
+        }
+      }
+
+      await Promise.all(
+        Array.from(
+          { length: Math.min(CONCURRENT_UPLOADS, targetTasks.length) },
+          () => prepareWorker(),
+        ),
       );
     }
 
@@ -712,7 +765,9 @@ async function send() {
         body: blob,
       });
 
-      if (!s3Res.ok) throw new Error("S3へのアップロードに失敗");
+      if (!s3Res.ok) {
+        throw new Error(`S3へのアップロードに失敗（${s3Res.status}）`);
+      }
 
       uploadedFileUrls.push({
         id: task.id,
@@ -735,8 +790,17 @@ async function send() {
         progText.innerText = "送信準備中...";
         await prepareUploadTargets(targetTasks);
       } catch (error) {
-        console.error("アップロード準備に失敗:", error);
-        return [...targetTasks];
+        if (error.code === "AUTH_EXPIRED") throw error;
+        console.warn("一括でのアップロード準備に失敗。個別取得に切り替えます:", error);
+        progText.innerText = "送信準備をやり直しています...";
+        try {
+          await prepareUploadTargetsIndividually(targetTasks);
+        } catch (fallbackError) {
+          if (fallbackError.code === "AUTH_EXPIRED") throw fallbackError;
+          console.error("アップロード準備に失敗:", fallbackError);
+          lastUploadError = fallbackError;
+          return [...targetTasks];
+        }
       }
 
       async function uploadWorker() {
@@ -746,7 +810,8 @@ async function send() {
             await uploadOne(task, tasks.indexOf(task));
           } catch (error) {
             console.error(`${task.file.name} の送信に失敗:`, error);
-            compressedPhotoCache.delete(task.file);
+            // 通信だけの失敗では圧縮済みデータを保持し、再送をすぐ開始できるようにする。
+            lastUploadError = error;
             failedTasks.push(task);
           }
         }
@@ -780,6 +845,7 @@ async function send() {
       progText.innerText = `${pendingTasks.length}枚の送信に失敗しました`;
       const shouldRetry = confirm(
         `${pendingTasks.length}枚の写真を送信できませんでした。\n\n` +
+          (lastUploadError ? `原因: ${lastUploadError.message}\n\n` : "") +
           "［OK］再送する（失敗した写真のみ追加）\n" +
           "［キャンセル］中止して写真をリセットする",
       );
@@ -790,6 +856,10 @@ async function send() {
         document.getElementById("screen-lock")?.remove();
         return;
       }
+
+      lastUploadError = null;
+      progText.innerText = `${pendingTasks.length}枚を再送しています...`;
+      await new Promise((resolve) => setTimeout(resolve, 300));
     }
     // --- 5. すべての画像がS3に上がったら、GASへ最終報告 ---
     progText.innerText = "サーバーへ転送中...";
@@ -831,7 +901,7 @@ async function send() {
         e.message,
     );
     btn.disabled = false;
-    resetSelectedPhotos();
+    // エラー時に選択写真を消すと再試行できないため、そのまま保持する。
     updateButtonState();
     if (document.getElementById("screen-lock")) {
       document.getElementById("screen-lock").remove();
