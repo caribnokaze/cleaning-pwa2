@@ -104,6 +104,7 @@
   <script>
     try {
       localStorage.removeItem("selectedStaffForLoginSession");
+      localStorage.removeItem("selectedShiftStaffForLoginSession");
     } catch (error) {
       console.warn("担当者名の一時保存を削除できませんでした。", error);
     }

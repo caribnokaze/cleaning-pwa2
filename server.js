@@ -20,6 +20,7 @@ const {
 const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 const { createMobileApiRouter } = require("./mobile-api");
 const { loadReportOptions } = require("./report-options");
+const { createShiftRouter } = require("./shift/router");
 const app = express();
 const AUTH_COOKIE = "cleaning_auth";
 const AUTH_TTL_SECONDS = 12 * 60 * 60;
@@ -322,6 +323,7 @@ app.use(async (req, res, next) => {
     if (await hasValidRequestAuth(req)) return next();
     if (
       req.path.startsWith("/api/") ||
+      req.path.startsWith("/shift-requests/api/") ||
       req.path.startsWith("/get-presigned-url")
     ) {
       return res.status(401).json({ error: "ログインが必要です" });
@@ -340,7 +342,21 @@ app.get("/api/session", (req, res) => {
   res.json({ authenticated: true, expiresAt });
 });
 
-app.use(express.static("."));
+const reportOptions = loadReportOptions();
+app.use("/shift-requests", createShiftRouter({
+  express,
+  staff: reportOptions.staff,
+  hasWebSession: (req) => isValidAuthToken(getCookie(req, AUTH_COOKIE)),
+}));
+const webAssets = new Set([
+  "/", "/index.html", "/login.html", "/gallery.html", "/style.css",
+  "/app.js", "/session.js", "/image/tocorologo.png",
+]);
+const serveWebAsset = express.static(__dirname);
+app.use((req, res, next) => {
+  if (webAssets.has(req.path)) return serveWebAsset(req, res, next);
+  next();
+});
 
 // AWS S3 クライアントの初期化（鍵は自動で.envから読み込まれます）
 const AWS_REGION = process.env.AWS_REGION || "ap-northeast-1";
@@ -377,7 +393,7 @@ app.use(
     express,
     s3Client,
     bucketName: BUCKET_NAME,
-    reportOptions: loadReportOptions(),
+    reportOptions,
   }),
 );
 
@@ -973,7 +989,8 @@ async function startServer() {
   }
 
   const PORT = process.env.PORT || 8080;
-  app.listen(PORT, () => {
+  const host = process.env.HOST || undefined;
+  app.listen(PORT, host, () => {
     console.log(`S3 Token Server running on port ${PORT}`);
   });
 }

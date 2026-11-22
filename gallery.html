@@ -441,6 +441,7 @@
 
     @media (max-width: 440px) {
       .filters { grid-template-columns: 1fr; }
+      .header-row, .header-links { flex-wrap: wrap; }
     }
 
     @media (max-width: 380px) {
@@ -459,6 +460,7 @@
       <h1>📷 清掃写真一覧</h1>
       <nav class="header-links" aria-label="ページ操作">
         <a class="back-link upload-nav-link" href="index.html">アップロードへ</a>
+        <a class="back-link" href="/shift-requests">希望シフト</a>
         <a class="back-link logout-link" href="/logout">ログアウト</a>
       </nav>
     </div>
@@ -509,7 +511,7 @@
   <script src="session.js"></script>
   <script>
     const CATEGORY_LABELS = {
-      photos_amenity: "タオル・アメニティ・Wi-Fi・Netflix",
+      photos_amenity: "タオル・アメニティ・Wi-Fi・Netflix・キッチンペーパー",
       photos_general: "その他全般",
       photos_kitchen: "キッチン",
       photos_bath: "お風呂・洗面・トイレ",
