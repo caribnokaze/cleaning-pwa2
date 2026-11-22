@@ -388,14 +388,33 @@ async function deployFunction(imageUri, roleArn, secretArns) {
     },
   };
 
+  const optionalEnvironmentNames = [
+    "SHIFT_GAS_URL",
+    "SHIFT_GAS_SECRET",
+    "SHIFT_GAS_LEGACY_MONTHS",
+  ];
+  for (const name of optionalEnvironmentNames) {
+    if (process.env[name]) environment.Variables[name] = process.env[name];
+  }
+
   let exists = true;
+  let currentFunction;
   try {
-    await clients.lambda.send(
+    currentFunction = await clients.lambda.send(
       new GetFunctionCommand({ FunctionName: FUNCTION_NAME }),
     );
   } catch (error) {
     if (error.name !== "ResourceNotFoundException") throw error;
     exists = false;
+  }
+
+  if (exists) {
+    const currentVariables = currentFunction.Configuration?.Environment?.Variables || {};
+    for (const name of optionalEnvironmentNames) {
+      if (!environment.Variables[name] && currentVariables[name]) {
+        environment.Variables[name] = currentVariables[name];
+      }
+    }
   }
 
   if (!exists) {
