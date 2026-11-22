@@ -5,7 +5,6 @@ const detail = document.getElementById("detail");
 const status = document.getElementById("status");
 const previous = document.getElementById("previous");
 const next = document.getElementById("next");
-const reload = document.getElementById("reload");
 const legacyNotice = document.getElementById("legacy-notice");
 const weekday = ["日", "月", "火", "水", "木", "金", "土"];
 const reportStaffKey = "selectedStaffForLoginSession";
@@ -111,7 +110,6 @@ function moveMonth(step) {
 }
 
 async function initialize() {
-  reload.disabled = true;
   render();
   status.textContent = "担当者と年月を読み込み中…";
   try {
@@ -138,17 +136,12 @@ async function initialize() {
     month.addEventListener("change", loadCalendar);
     previous.addEventListener("click", () => moveMonth(-1));
     next.addEventListener("click", () => moveMonth(1));
-    reload.removeEventListener("click", initialize);
-    reload.addEventListener("click", loadCalendar);
     await loadCalendar();
   } catch (error) {
-    status.textContent = error.message + " 再読み込みしてください。";
-  } finally {
-    reload.disabled = false;
+    status.textContent = error.message + " しばらくしてからページを開き直してください。";
   }
 }
 
-reload.addEventListener("click", initialize);
 window.addEventListener("pageshow", (event) => {
   if (!event.persisted || staff.disabled) return;
   const previousStaff = staff.value;
