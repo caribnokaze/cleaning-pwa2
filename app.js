@@ -182,8 +182,8 @@ function setupStaffInput() {
     rememberSelectedStaff();
   };
 
-  const renderSuggestions = () => {
-    const query = normalizeSiteSearch(staffDisplay.value);
+  const renderSuggestions = (showAll = false) => {
+    const query = showAll ? "" : normalizeSiteSearch(staffDisplay.value);
     const matches = rankSearchMatches(
       options,
       query,
@@ -196,6 +196,7 @@ function setupStaffInput() {
       button.className = "searchable-select-option";
       button.role = "option";
       button.textContent = staffOption.value;
+      button.addEventListener("pointerdown", (event) => event.preventDefault());
       button.addEventListener("mousedown", (event) => event.preventDefault());
       button.addEventListener("click", () => selectStaff(staffOption));
       suggestions.appendChild(button);
@@ -223,7 +224,8 @@ function setupStaffInput() {
     rememberSelectedStaff();
   };
 
-  staffDisplay.addEventListener("focus", renderSuggestions);
+  staffDisplay.addEventListener("focus", () => renderSuggestions(true));
+  staffDisplay.addEventListener("click", () => renderSuggestions(true));
   staffDisplay.addEventListener("input", () => {
     staffInput.value = "";
     renderSuggestions();
